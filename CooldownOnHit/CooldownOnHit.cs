@@ -110,10 +110,10 @@ namespace CooldownOnHit
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F2))
-            {
-                CheckSupport();
-            }
+            //if (Input.GetKeyDown(KeyCode.F2))
+            //{
+            //    CheckSupport();
+            //}
         }
 
         private void ShowStats()
@@ -216,7 +216,7 @@ namespace CooldownOnHit
                 "Cooldowns",
                 "SecondaryAbilityCooldownReductionOnHitAmount",
                 "How many seconds to reduce the Secondary skill(RMB) cooldown by on each hit with the Primary skill.",
-                1f);
+                0.5f);
 
             SpecialSkillCooldownReductionOnHitAmountConfig = Config.Wrap(
                 "Cooldowns",
@@ -268,7 +268,7 @@ namespace CooldownOnHit
             var dt2 = Time.fixedDeltaTime;
             if (dt == dt2) return;
 
-            Chat.AddMessage("Secondary or Special currently on cooldown");
+            //Chat.AddMessage("Secondary or Special currently on cooldown");
 
             var skillType = typeof(RoR2.GenericSkill);
 
@@ -357,7 +357,6 @@ namespace CooldownOnHit
 
         public void AlterCooldown(GenericSkill skill, float amount)
         {
-            Chat.AddMessage(skill.ToString() + amount.ToString());
             skill.RunRecharge(amount);
             //AlteredCooldownChatMessage(skill, amount);
         }
