@@ -4,25 +4,28 @@ using System.Linq;
 using System.Reflection;
 using RoR2;
 
-public class CommandHelper
+namespace Utilities
 {
-    public static void RegisterCommands(RoR2.Console self)
+    public class CommandHelper
     {
-        var types = typeof(CommandHelper).Assembly.GetTypes();
-        var catalog = self.GetFieldValue<IDictionary>("concommandCatalog");
-
-        foreach (var methodInfo in types.SelectMany(x => x.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)))
+        public static void RegisterCommands(RoR2.Console self)
         {
-            var customAttributes = methodInfo.GetCustomAttributes(false);
-            foreach (var attribute in customAttributes.OfType<ConCommandAttribute>())
+            var types = typeof(CommandHelper).Assembly.GetTypes();
+            var catalog = self.GetFieldValue<IDictionary>("concommandCatalog");
+
+            foreach (var methodInfo in types.SelectMany(x => x.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)))
             {
-                var conCommand = Reflection.GetNestedType<RoR2.Console>("ConCommand").Instantiate();
+                var customAttributes = methodInfo.GetCustomAttributes(false);
+                foreach (var attribute in customAttributes.OfType<ConCommandAttribute>())
+                {
+                    var conCommand = Reflection.GetNestedType<RoR2.Console>("ConCommand").Instantiate();
 
-                conCommand.SetFieldValue("flags", attribute.flags);
-                conCommand.SetFieldValue("helpText", attribute.helpText);
-                conCommand.SetFieldValue("action", (RoR2.Console.ConCommandDelegate)Delegate.CreateDelegate(typeof(RoR2.Console.ConCommandDelegate), methodInfo));
+                    conCommand.SetFieldValue("flags", attribute.flags);
+                    conCommand.SetFieldValue("helpText", attribute.helpText);
+                    conCommand.SetFieldValue("action", (RoR2.Console.ConCommandDelegate)Delegate.CreateDelegate(typeof(RoR2.Console.ConCommandDelegate), methodInfo));
 
-                catalog[attribute.commandName.ToLower()] = conCommand;
+                    catalog[attribute.commandName.ToLower()] = conCommand;
+                }
             }
         }
     }

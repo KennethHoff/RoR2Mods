@@ -9,6 +9,7 @@
     <Import_RootNamespace>Utilities</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)SkillDamageSource.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Reflection.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CommandHelper.cs" />
   </ItemGroup>
