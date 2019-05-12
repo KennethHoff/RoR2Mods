@@ -265,4 +265,6 @@
     </Reference>
   </ItemGroup>
 
+  <Import Project="..\Utilities\Utilities.projitems" Label="Shared" />
+
 </Project>
