@@ -9,6 +9,7 @@ using System.Reflection;
 using UnityEngine;
 using UnityEngine.Networking;
 using Utilities;
+using System.Linq;
 
 namespace CooldownOnHit
 {
@@ -43,11 +44,9 @@ namespace CooldownOnHit
 
 
 
-
-
-        public static int PrimarySkillRecharging {
+        public static bool PrimarySkillRecharging {
             get => savedConfig.primaryRecharging;
-            protected set => savedConfig.SetPrimaryRecharging(value == 1 ? true : false);
+            protected set => savedConfig.SetPrimaryRecharging(value);
         }
         public static float PrimarySkillCooldownReductionOnHitAmount {
             get => savedConfig.primaryAmount;
@@ -55,9 +54,9 @@ namespace CooldownOnHit
         }
 
 
-        public static int SecondarySkillRecharging {
+        public static bool SecondarySkillRecharging {
             get => savedConfig.secondaryRecharging;
-            protected set => savedConfig.SetSecondaryRecharging(value == 1 ? true : false);
+            protected set => savedConfig.SetSecondaryRecharging(value);
         }
         public static float SecondarySkillCooldownReductionOnHitAmount {
             get => savedConfig.secondaryAmount;
@@ -65,9 +64,9 @@ namespace CooldownOnHit
         }
 
 
-        public static int UtilitySkillRecharging {
+        public static bool UtilitySkillRecharging {
             get => savedConfig.utilityRecharging;
-            protected set => savedConfig.SetUtilityRecharging(value == 1 ? true : false);
+            protected set => savedConfig.SetUtilityRecharging(value);
         }
         public static float UtilitySkillCooldownReductionOnHitAmount {
             get => savedConfig.utilityAmount;
@@ -75,9 +74,9 @@ namespace CooldownOnHit
         }
 
 
-        public static int SpecialSkillRecharging {
+        public static bool SpecialSkillRecharging {
             get => savedConfig.specialRecharging;
-            protected set => savedConfig.SetSpecialRecharging(value == 1 ? true : false);
+            protected set => savedConfig.SetSpecialRecharging(value);
         }
         public static float SpecialSkillCooldownReductionOnHitAmount {
             get => savedConfig.specialAmount;
@@ -85,9 +84,9 @@ namespace CooldownOnHit
         }
 
 
-        public static int EquipmentRecharging {
+        public static bool EquipmentRecharging {
             get => savedConfig.equipmentRecharging;
-            protected set => savedConfig.SetEquipmentRecharging(value == 1 ? true : false);
+            protected set => savedConfig.SetEquipmentRecharging(value);
         }
         public static float EquipmentCooldownReductionOnHitAmount {
             get => savedConfig.equipmentAmount;
@@ -98,7 +97,15 @@ namespace CooldownOnHit
         public IRpcAction<ConfigContainer> ConfigRequestClient { get; set; }
 
         // (int)SurvivorIndex => SurvivorIndex(int)
-        public IRpcFunc<int, bool> CharacterSupportedRequestHost { get; set; }
+        //public IRpcFunc<int, bool> CharacterSupportedRequestHost { get; set; }
+
+        public IRpcFunc<int, CharacterSupportContainer> CharacterSupportedRequestHost { get; set; }
+
+        public IRpcFunc<int, int> SurvivorIndexRequestHost { get; set; }
+
+        public IRpcAction<int> CooldownRequestClient { get; set; }
+
+
 
 
         public readonly SurvivorIndex[] workingSurvivors = new SurvivorIndex[] { SurvivorIndex.Huntress };
@@ -109,9 +116,6 @@ namespace CooldownOnHit
 
 
 
-        public bool checkedForLocalInfo;
-
-
         private bool localPlayercharacterSupported;
         private int localPlayerNumber;
 
@@ -120,68 +124,23 @@ namespace CooldownOnHit
 
 
         public SkillLocator localPlayerSkillLoc;
-        public GenericSkill LocalPlayerPrimarySkill {
-            get => localPlayerSkillLoc.GetSkill(SkillSlot.Primary);
-        }
-        public GenericSkill LocalPlayerSecondarySkill {
-            get => localPlayerSkillLoc.GetSkill(SkillSlot.Secondary);
-        }
-        public GenericSkill LocalPlayerUtilitySkill {
-            get => localPlayerSkillLoc.GetSkill(SkillSlot.Utility);
-        }
-        public GenericSkill LocalPlayerSpecialSkill {
-            get => localPlayerSkillLoc.GetSkill(SkillSlot.Special);
-        }
 
+        private GenericSkill localPlayerPrimarySkill;
+        private GenericSkill localPlayerSecondarySkill;
+        private GenericSkill localPlayerUtilitySkill;
+        private GenericSkill localPlayerSpecialSkill;
 
         public void Awake()
         {
-
             RegisterMiniRpc();
             EnableEvents_Awake();
 
         }
 
-        public void EnableEvents_PodDescent()
-        {
-            Debug.LogWarning("Survivor Pod Descends");
-
-
-            localPlayerCharacterMaster = LocalUserManager.GetFirstLocalUser().cachedMasterController.master;
-
-
-            LocalUserManager.GetFirstLocalUser().onBodyChanged += CooldownOnHit_onBodyChanged;
-
-
-            SetDefaultValues();
-            SendConfigToPlayers();
-            GetLocalPlayerInfo();
-
-            if (currentRunConfig == null)
-            {
-                Debug.LogWarning("Current Run Config is null. RunRecharge will not... Run >:)");
-            }
-
-
-
-
-            foreach (var masterController in PlayerCharacterMasterController.instances)
-            {
-                Debug.Log(GetSurvivorIndex(masterController.master));
-                //redo it so it works based off of this instead of each local user asking
-            }
-
-        }
-
-        private void CooldownOnHit_onBodyChanged()
-        {
-            CheckLocalCharacterSupported();
-        }
 
         public void SetDefaultValues()
         {
 
-            checkedForLocalInfo = false;
             newRechargeStopwatch = float.NaN;
             newFinalRechargeInterval = float.NaN;
     }
@@ -195,11 +154,10 @@ namespace CooldownOnHit
 
         private void SendConfigToPlayers()
         {
-            //if(NetworkServer.active)
-            //{
-            ConfigContainer temp = savedConfig;
-            ConfigRequestClient.Invoke(temp);
-            //}
+            if (NetworkServer.active)
+            {
+                ConfigRequestClient.Invoke(savedConfig);
+            }
         }
 
         public void EnableEvents_Awake()
@@ -236,8 +194,31 @@ namespace CooldownOnHit
 
         }
 
+        public void EnableEvents_PodDescent()
+        {
+            Debug.LogWarning("Survivor Pod Descends");
+
+            CheckLocalCharacterSupported();
+
+            SetDefaultValues();
+            SendConfigToPlayers();
+
+
+        }
+
+
         private void EnableEvents_PodLanded()
         {
+            GetLocalPlayerInfo();
+
+
+
+
+
+            if (currentRunConfig == null)
+            {
+                Debug.LogWarning("Current Run Config is null. RunRecharge will not... Run >:)");
+            }
             On.RoR2.GenericSkill.RunRecharge += GenericSkill_RunRecharge;
         }
 
@@ -248,15 +229,53 @@ namespace CooldownOnHit
 
             ConfigRequestClient = miniRpc.RegisterAction(Target.Client, (NetworkUser user, ConfigContainer configContainer ) =>
             {
+                Debug.Log("Saved config:\n" + savedConfig.ToString());
                 currentRunConfig = configContainer;
-                Debug.Log($"[Client]: Host sent us {configContainer.ToString()})");
+                Debug.Log("Current config:\n" + currentRunConfig.ToString());
             });
 
-            CharacterSupportedRequestHost = miniRpc.RegisterFunc<int, bool>(Target.Server, (NetworkUser user, int i ) =>
+            CharacterSupportedRequestHost = miniRpc.RegisterFunc<int, CharacterSupportContainer>(Target.Server, (NetworkUser user, int i) =>
             {
-                var index = (SurvivorIndex)i;
+                CharacterSupportContainer ret = new CharacterSupportContainer();
+                var index = GetSurvivorIndex(user.master);
                 var supported = CheckCharacterSupport(index);
-                return supported;
+
+                ret.index = (int)index;
+                ret.supported = supported;
+
+
+                Debug.Log($"[Host]: Client {user} sent me {index}. It is {(supported ? "" : "not")} supported");
+                return ret;
+            });
+
+            SurvivorIndexRequestHost = miniRpc.RegisterFunc<int, int>(Target.Server, (NetworkUser user, int i) =>
+            {
+                var index = GetSurvivorIndex(user.master);
+                return (int)index;
+            });
+
+            CooldownRequestClient = miniRpc.RegisterAction<int>(Target.Client, (NetworkUser user, int i) =>
+            {
+                var slot = (SkillSlot)i;
+
+                switch (slot)
+                {
+                    case SkillSlot.Primary:
+                        AlterCooldown(localPlayerPrimarySkill, currentRunConfig.primaryAmount);
+                        break;
+                    case SkillSlot.Secondary:
+                        AlterCooldown(localPlayerSecondarySkill, currentRunConfig.secondaryAmount);
+                        break;
+                    case SkillSlot.Utility:
+                        AlterCooldown(localPlayerUtilitySkill, currentRunConfig.utilityAmount);
+                        break;
+                    case SkillSlot.Special:
+                        AlterCooldown(localPlayerSpecialSkill, currentRunConfig.specialAmount);
+                        break;
+                    case SkillSlot.None:
+                        Debug.LogError("Sent Skillslot None");
+                        break;
+                }
             });
 
         }
@@ -265,11 +284,7 @@ namespace CooldownOnHit
         {
             if (Input.GetKeyDown(KeyCode.F2))
             {
-                if (!checkedForLocalInfo)
-                {
-                    GetLocalPlayerInfo();
-                    checkedForLocalInfo = true;
-                }
+                GetLocalPlayerInfo();
 
                 CheckLocalCharacterSupported();
 
@@ -286,39 +301,60 @@ namespace CooldownOnHit
                 Chat.AddMessage(stringerino);
 
 
-                Chat.AddMessage("Character supported? " + localPlayercharacterSupported.ToString());
+                Chat.AddMessage("Survivor: " + localPlayerSurvivorIndex.ToString() + " supported? " + localPlayercharacterSupported.ToString());
             }
         }
 
         public void GetLocalPlayerInfo()
         {
-
-
-            Debug.Log("Starting getting local player info");
-            for (int i = 0; i < PlayerCharacterMasterController.instances.Count; i++)
+            if (NetworkServer.active)
             {
-            Debug.Log("Getting local player info for player: " + i);
-                if (PlayerCharacterMasterController.instances[i].master == localPlayerCharacterMaster)
-                {
-                    Debug.Log("You are player: " + i);
-                    localPlayerNumber = i;
-                    localPlayerCharacterMaster = PlayerCharacterMasterController.instances[i].master;
-                    Debug.LogWarning("Character master: " + localPlayerCharacterMaster);
-                    localPlayerSkillLoc = GetSkillLoc(localPlayerCharacterMaster);
-                    Debug.LogWarning("Skill Locator: " + localPlayerSkillLoc);
-                    localPlayerSurvivorIndex = GetSurvivorIndex(localPlayerCharacterMaster);
-                    Debug.LogWarning("Survivor Index: " + localPlayerSurvivorIndex);
-                    Chat_GetLocalPlayerInfo();
-                }
+                Debug.Log("Getting LocalPlayerCharacterMaster on server");
+                localPlayerCharacterMaster = LocalUserManager.GetFirstLocalUser().cachedMasterController.master;
+                Debug.Log($"Got [{localPlayerCharacterMaster}])");
             }
+            else if (NetworkClient.active)
+            {
+                Debug.Log("Getting LocalPlayerCharacterMaster on client");
+                localPlayerCharacterMaster = LocalUserManager.GetFirstLocalUser().cachedMasterController.master;
+                Debug.Log($"Got [{localPlayerCharacterMaster}])");
+            }
+
+            //localPlayerSurvivorIndex = GetSurvivorIndex(localPlayerCharacterMaster);
+
+
+            if (localPlayerCharacterMaster == null)
+            {
+                Debug.LogWarning("CharacterMaster not set!");
+            }
+            localPlayerSkillLoc = GetSkillLoc(localPlayerCharacterMaster);
 
             Chat_GetLocalPlayerInfo();
 
+            GetLocalPlayerSkills();
+
+        }
+
+        private void GetLocalPlayerSkills()
+        {
+            localPlayerPrimarySkill = localPlayerSkillLoc.primary;
+            localPlayerSecondarySkill = localPlayerSkillLoc.secondary;
+            localPlayerUtilitySkill = localPlayerSkillLoc.utility;
+            localPlayerSpecialSkill = localPlayerSkillLoc.special;
+            //Chat_GetLocalPlayerSkills();
+        }
+
+        private void Chat_GetLocalPlayerSkills()
+        {
+            Chat.AddMessage($"Primary skill: {localPlayerPrimarySkill}");
+            Chat.AddMessage($"Secondary skill: {localPlayerSecondarySkill}");
+            Chat.AddMessage($"Utility skill: {localPlayerUtilitySkill}");
+            Chat.AddMessage($"Special skill: {localPlayerSpecialSkill}");
         }
 
         public void Chat_GetLocalPlayerInfo()
         {
-            Chat.AddMessage("You are player number: " + localPlayerNumber + ", and you are playing the Survivor: " + localPlayerSurvivorIndex);
+            Chat.AddMessage("You are playing as: " + localPlayerSurvivorIndex);
         }
 
 
@@ -356,11 +392,12 @@ namespace CooldownOnHit
 
         public static SkillLocator GetSkillLoc(CharacterMaster master)
         {
-            return master.GetBody().GetComponent<SkillLocator>();
+            CharacterBody body = master.GetBody();
+            Debug.Log("Character Body: " + body.ToString());
+            SkillLocator locator = body.GetComponent<SkillLocator>();
+            Debug.Log("Primary skill: " + locator.primary.name.ToString());
+            return locator;
         }
-
-
-
 
         public bool BulletAttack_DefaultHitCallback(On.RoR2.BulletAttack.orig_DefaultHitCallback orig, BulletAttack self, ref BulletAttack.BulletHit hitInfo)
         {
@@ -382,10 +419,10 @@ namespace CooldownOnHit
         public bool CanAffectCooldown(GenericSkill skill)
         {
             if (
-                (skill == LocalPlayerPrimarySkill && currentRunConfig.primaryAmount == 0) ||
-                (skill == LocalPlayerSecondarySkill && currentRunConfig.secondaryAmount == 0) ||
-                (skill == LocalPlayerUtilitySkill && currentRunConfig.utilityAmount == 0) ||
-                (skill == LocalPlayerSpecialSkill && currentRunConfig.specialAmount == 0))
+                (skill == localPlayerPrimarySkill && currentRunConfig.primaryAmount == 0) ||
+                (skill == localPlayerSecondarySkill && currentRunConfig.secondaryAmount == 0) ||
+                (skill == localPlayerUtilitySkill && currentRunConfig.utilityAmount == 0) ||
+                (skill == localPlayerSpecialSkill && currentRunConfig.specialAmount == 0))
             {
                 return false;
             }
@@ -399,54 +436,103 @@ namespace CooldownOnHit
 
         // Client tells the server when he wants to recharge. Server responds with a the amount of cooldown to reduce the skill by.
         public void GenericSkill_RunRecharge(On.RoR2.GenericSkill.orig_RunRecharge orig, GenericSkill skill, float dt)
-            {
-                if (CanRecharge(skill))
-                {
-                    orig(skill, dt);
-                }
-
-                if (!CanAffectCooldown(skill)) return;
-
-                if (!localPlayercharacterSupported) return;
-
-                if (skill.stock >= skill.maxStock) return;
-
-                // Not entirely sure about this next line..
-                var dt2 = Time.fixedDeltaTime;
-                if (dt == dt2) return;
-
-                ReduceCooldown(skill, dt);
-
-            }
-            public void AlterSkillCooldown(GenericSkill skill, float amount)
         {
-            var skillType = skill.GetType();
+
+            if (!localPlayercharacterSupported)
+            {
+                orig(skill, dt);
+                return;
+            }
+
+            if (CanRecharge(skill))
+            {
+                orig(skill, dt);
+            }
+            else if (CanAddCharge(skill))
+            {
+                AddCharge(skill);
+            }
+
+            if (CanAffectCooldown(skill))
+            {
+                AffectCooldown(skill, dt);
+            }
+        }
+
+        private void AffectCooldown(GenericSkill skill, float dt)
+        {
+            if (skill.stock >= skill.maxStock) return;
+
+            // Not entirely sure about this next line..
+            var dt2 = Time.fixedDeltaTime;
+            if (dt == dt2) return;
+
+            ReduceCooldown(skill, dt);
+        }
+
+
+        // TODO: This has to be redone - Create my own 'StopWatch'.
+        public void AlterSkillCooldown(GenericSkill skill, float amount)
+        {
+            var skillType = typeof(GenericSkill);
 
             var rechargeStopwatchField = skillType.GetField("rechargeStopwatch", BindingFlags.NonPublic | BindingFlags.Instance);
-            var finalRechargeIntervalField = skillType.GetField("finalRechargeInterval", BindingFlags.NonPublic | BindingFlags.Instance);
-            var restockSteplikeMethod = skillType.GetMethod("RestockSteplike", BindingFlags.NonPublic | BindingFlags.Instance);
+            float rechargeStopwatchValue = (float)rechargeStopwatchField.GetValue(skill);
 
             if (newRechargeStopwatch == float.NaN) newRechargeStopwatch = GetPrivateFloatFromGenericSkillReflection(skill, "rechargeStopwatch");
             if (newFinalRechargeInterval == float.NaN) newFinalRechargeInterval = GetPrivateFloatFromGenericSkillReflection(skill, "finalRechargeInterval");
 
             if (!skill.beginSkillCooldownOnSkillEnd || (skill.stateMachine.state.GetType() != skill.activationState.stateType))
             {
-                rechargeStopwatchField.SetValue(skill, (float)rechargeStopwatchField.GetValue(skill) + amount);
+                var finalValue = rechargeStopwatchValue + amount;
+                rechargeStopwatchField.SetValue(skill, finalValue);
             }
-            if ((float)rechargeStopwatchField.GetValue(skill) >= (float)finalRechargeIntervalField.GetValue(skill))
+            if (CanAddCharge(skill))
             {
-                restockSteplikeMethod.Invoke(skill, null);
+                AddCharge(skill);
             }
         }
 
+        private void AddCharge(GenericSkill skill)
+        {
+            var skillType = typeof(GenericSkill);
+            var restockSteplikeMethod = skillType.GetMethod("RestockSteplike", BindingFlags.NonPublic | BindingFlags.Instance);
+            restockSteplikeMethod.Invoke(skill, null);
+        }
+
+        private static bool CanAddCharge(GenericSkill skill)
+        {
+            var skillType = typeof(GenericSkill);
+
+            var rechargeStopwatchField = skillType.GetField("rechargeStopwatch", BindingFlags.NonPublic | BindingFlags.Instance);
+            float rechargeStopwatchValue = (float)rechargeStopwatchField.GetValue(skill);
+            var finalRechargeIntervalField = skillType.GetField("finalRechargeInterval", BindingFlags.NonPublic | BindingFlags.Instance);
+            float finalRechargeIntervalValue = (float)finalRechargeIntervalField.GetValue(skill);
+            var restockSteplikeMethod = skillType.GetMethod("RestockSteplike", BindingFlags.NonPublic | BindingFlags.Instance);
+
+            return (rechargeStopwatchValue >= finalRechargeIntervalValue);
+        }
+
+        //private void CheckLocalCharacterSupported()
+        //{
+        //    CharacterSupportedRequestHost.Invoke((int)localPlayerSurvivorIndex, result =>
+        //    {
+        //        Debug.Log(localPlayerSurvivorIndex.ToString());
+        //        localPlayercharacterSupported = result;
+
+        //        Debug.Log($"[Client]: Server sent me {result} on my request on CharacterSupport. I sent in {localPlayerSurvivorIndex.ToString()}");
+        //    });
+        //}
         private void CheckLocalCharacterSupported()
         {
             CharacterSupportedRequestHost.Invoke((int)localPlayerSurvivorIndex, result =>
             {
                 Debug.Log(localPlayerSurvivorIndex.ToString());
-                localPlayercharacterSupported = result;
+                localPlayercharacterSupported = result.supported;
 
-                Debug.Log($"[Client]: Server sent me {result} on my request on CharacterSupport");
+                localPlayerSurvivorIndex = (SurvivorIndex)result.index;
+
+                Debug.Log($"[Client]: Server sent me (Index: {result.index}, result: {result.supported} on my request on CharacterSupport.");
             });
         }
 
@@ -455,13 +541,21 @@ namespace CooldownOnHit
             var find = Array.IndexOf<SurvivorIndex>(workingSurvivors, index);
             var workingSurvivorsString = string.Join(", ", workingSurvivors);
 
-            return (find == (int)SurvivorIndex.None);
+            if (find == -1)
+            {
+                return false;
+            }
+            else
+            {
+                return true;
+            }
 
         }
 
         public SurvivorIndex GetSurvivorIndex(CharacterMaster master)
         {
             var bodyPrefab = master.bodyPrefab;
+            Debug.Log("Body prefab:" + bodyPrefab);
             var def = SurvivorCatalog.FindSurvivorDefFromBody(bodyPrefab);
             var index = def.survivorIndex;
 
@@ -489,12 +583,6 @@ namespace CooldownOnHit
             AlterCooldown(skill, amount);
         }
 
-        public void AlterCooldownByTotalPercentage(GenericSkill skill, float percent)
-        {
-            var amount = GetSkillCooldownReflection(skill) * percent;
-            AlterCooldown(skill, amount);
-        }
-
         public void AlterCooldown(GenericSkill skill, float amount)
         {
             skill.RunRecharge(amount);
@@ -510,39 +598,76 @@ namespace CooldownOnHit
             Chat.AddMessage(line0 + "\n" + line1 + "\n" + line2 + "\n" + line3);
         }
 
+        private void SendAlterCooldownRequestToClient(SkillSlot slot, NetworkUser user)
+        {
+            CooldownRequestClient.Invoke((int)slot, (user));
+        }
+
         private void ArrowOrb_OnArrival(On.RoR2.Orbs.ArrowOrb.orig_OnArrival orig, RoR2.Orbs.ArrowOrb self)
         {
             orig(self);
 
             if (currentRunConfig.secondaryAmount == 0) return;
 
-            var skillLocator = self.attacker.GetComponent<SkillLocator>();
-            var skill = skillLocator.secondary;
-            AlterCooldownByFlatAmount(skill, currentRunConfig.secondaryAmount);
+            SkillLocator skillLocator = self.attacker.GetComponent<SkillLocator>();
+            GenericSkill skill = skillLocator.secondary;
+
+            CreateAlterCooldownRequest(skillLocator, skill);
+
         }
+
+        private void CreateAlterCooldownRequest(SkillLocator skillLocator, GenericSkill skill)
+        {
+
+            SkillSlot slot = skillLocator.FindSkillSlot(skill);
+            NetworkUser user = GetUser(skillLocator);
+            SendAlterCooldownRequestToClient(slot, user);
+        }
+
+        private static NetworkUser GetUser(SkillLocator skillLocator)
+        {
+            var playerBody = skillLocator.GetComponent<CharacterBody>();
+            NetworkUser user = null;
+            var instancesList = NetworkUser.readOnlyInstancesList;
+            for (int i = 0; i < instancesList.Count; i++)
+            {
+                if (instancesList[i].GetCurrentBody() == playerBody)
+                {
+                    user = instancesList[i];
+                }
+            }
+            if (user == null)
+            {
+                Debug.LogWarning("User is null");
+            }
+
+            return user;
+        }
+
         private void LightningOrb_OnArrival(On.RoR2.Orbs.LightningOrb.orig_OnArrival orig, RoR2.Orbs.LightningOrb self)
         {
             orig(self);
 
-            if (currentRunConfig.specialAmount == 0) return;
+            Debug.Log("Lightning orb has arrived");
+
 
             if (self.lightningType == RoR2.Orbs.LightningOrb.LightningType.HuntressGlaive)
             {
+
+                if (currentRunConfig.specialAmount == 0) return;
                 var skillLocator = self.attacker.GetComponent<SkillLocator>();
                 var skill = skillLocator.special;
 
-                Debug.Log(skill);
-
-                AlterCooldownByFlatAmount(skill, currentRunConfig.specialAmount);
+                CreateAlterCooldownRequest(skillLocator, skill);
             }
         }
         private bool CanRecharge(GenericSkill skill)
         {
             if (
-                (skill == LocalPlayerPrimarySkill && currentRunConfig.primaryRecharging == 1) ||
-                (skill == LocalPlayerSecondarySkill && currentRunConfig.secondaryRecharging == 1) ||
-                (skill == LocalPlayerUtilitySkill && currentRunConfig.utilityRecharging == 1) ||
-                (skill == LocalPlayerSpecialSkill && currentRunConfig.specialRecharging == 1))
+                (skill == localPlayerPrimarySkill && currentRunConfig.primaryRecharging) ||
+                (skill == localPlayerSecondarySkill && currentRunConfig.secondaryRecharging) ||
+                (skill == localPlayerUtilitySkill && currentRunConfig.utilityRecharging) ||
+                (skill == localPlayerSpecialSkill && currentRunConfig.specialRecharging))
             {
                 return true;
             }
@@ -552,7 +677,7 @@ namespace CooldownOnHit
             }
         }
 
-        [ConCommand(commandName = "COH_Primary", flags = ConVarFlags.None, helpText = "Primary Skill configurations.")]
+        [ConCommand(commandName = "COH_Primary", flags = ConVarFlags.SenderMustBeServer, helpText = "Primary Skill configurations.")]
         private static void CCPrimary(ConCommandArgs args)
         {
             if (args.Count == 0)
@@ -583,7 +708,7 @@ namespace CooldownOnHit
             }
         }
 
-        [ConCommand(commandName = "COH_Secondary", flags = ConVarFlags.None, helpText = "Secondary Skill configurations.")]
+        [ConCommand(commandName = "COH_Secondary", flags = ConVarFlags.SenderMustBeServer, helpText = "Secondary Skill configurations.")]
         private static void CCSecondary(ConCommandArgs args)
         {
             if (args.Count == 0)
@@ -614,7 +739,7 @@ namespace CooldownOnHit
             }
         }
 
-        [ConCommand(commandName = "COH_Utility", flags = ConVarFlags.None, helpText = "Utility Skill configurations.")]
+        [ConCommand(commandName = "COH_Utility", flags = ConVarFlags.SenderMustBeServer, helpText = "Utility Skill configurations.")]
         private static void CCUtility(ConCommandArgs args)
         {
             if (args.Count == 0)
@@ -646,7 +771,7 @@ namespace CooldownOnHit
             Debug.Log("One arguments expected. A boolean (true or False)");
         }
 
-        [ConCommand(commandName = "COH_Special", flags = ConVarFlags.None, helpText = "Sets Special Skill configurations.")]
+        [ConCommand(commandName = "COH_Special", flags = ConVarFlags.SenderMustBeServer, helpText = "Sets Special Skill configurations.")]
         private static void CCSpecial(ConCommandArgs args)
         {
             if (args.Count == 0)
@@ -678,7 +803,7 @@ namespace CooldownOnHit
             Debug.Log("One arguments expected. A boolean (true or False)");
         }
 
-        [ConCommand(commandName = "COH_Equipment", flags = ConVarFlags.None, helpText = "Sets Equipment Skill configurations.")]
+        [ConCommand(commandName = "COH_Equipment", flags = ConVarFlags.SenderMustBeServer, helpText = "Sets Equipment Skill configurations.")]
         private static void CCSetEquipment(ConCommandArgs args)
         {
             if (args.Count == 0)
@@ -710,13 +835,19 @@ namespace CooldownOnHit
             Debug.Log("One arguments expected. A boolean (true or False)");
         }
 
-        [ConCommand(commandName = "COH_GetConfig", flags = ConVarFlags.None, helpText = "Displays the current configuration.")]
-        private static void CCGetConfig(ConCommandArgs args)
+        [ConCommand(commandName = "COH_GetSavedConfig", flags = ConVarFlags.SenderMustBeServer, helpText = "Displays the saved configuration.")]
+        private static void CCGetSavedConfig(ConCommandArgs args)
         {
             Debug.Log(args.Count == 0  ? savedConfig.ToString() : "Does not accept arguments. Did you mean something else?");
         }
 
-        [ConCommand(commandName = "COH_ResetConfig", flags = ConVarFlags.None, helpText = "Sets the config back to its default state")]
+        [ConCommand(commandName = "COH_GetRunConfig", flags = ConVarFlags.None, helpText = "Display the current configuration")]
+        private static void CCGetCurrentConfig(ConCommandArgs args)
+        {
+            Debug.Log(args.Count == 0 ? currentRunConfig.ToString() : "Does not accept arguments. Did you mean something else?");
+        }
+
+        [ConCommand(commandName = "COH_ResetConfig", flags = ConVarFlags.SenderMustBeServer, helpText = "Sets the config back to its default state")]
         private static void CCResetConfig(ConCommandArgs args)
         {
             savedConfig.SetDefault();
@@ -728,7 +859,7 @@ namespace CooldownOnHit
 
         public static ConfigContainer savedConfig = new ConfigContainer();
 
-        public ConfigContainer currentRunConfig;
+        public static ConfigContainer currentRunConfig;
 
         private static ConfigWrapper<bool> PrimarySkillRechargingConfig { get; set; }
         private static ConfigWrapper<string> PrimarySkillCooldownReductionOnHitAmountConfig { get; set; }
@@ -748,8 +879,6 @@ namespace CooldownOnHit
 
         private static ConfigWrapper<bool> EquipmentRechargingConfig { get; set; }
         private static ConfigWrapper<string> EquipmentCooldownReductionOnHitAmountConfig { get; set; }
-
-
         public void WrapConfig()
         {
             var WIPDescription = "Does not do anything. I'll gladly accept suggestions";
@@ -817,19 +946,19 @@ namespace CooldownOnHit
 
         public static void SaveConfigToFile(ConfigContainer container)
         {
-            PrimarySkillRechargingConfig.Value = container.primaryRecharging == 1 ? true : false;
+            PrimarySkillRechargingConfig.Value = container.primaryRecharging;
             PrimarySkillCooldownReductionOnHitAmountConfig.Value = container.primaryAmount.ToString();
 
-            SecondarySkillRechargingConfig.Value = container.secondaryRecharging == 1 ? true : false;
+            SecondarySkillRechargingConfig.Value = container.secondaryRecharging;
             SecondarySkillCooldownReductionOnHitAmountConfig.Value = container.secondaryAmount.ToString();
 
-            UtilitySkillRechargingConfig.Value = container.utilityRecharging == 1 ? true : false;
+            UtilitySkillRechargingConfig.Value = container.utilityRecharging;
             UtilitySkillCooldownReductionOnHitAmountConfig.Value = container.utilityAmount.ToString();
 
-            SpecialSkillRechargingConfig.Value = container.specialRecharging == 1 ? true : false;
+            SpecialSkillRechargingConfig.Value = container.specialRecharging;
             SpecialSkillCooldownReductionOnHitAmountConfig.Value = container.specialAmount.ToString();
 
-            EquipmentRechargingConfig.Value = container.equipmentRecharging == 1 ? true : false;
+            EquipmentRechargingConfig.Value = container.equipmentRecharging;
             EquipmentCooldownReductionOnHitAmountConfig.Value = container.equipmentAmount.ToString();
         }
         public static ConfigContainer LoadConfigFromFile()

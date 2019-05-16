@@ -7,11 +7,11 @@ namespace CooldownOnHit
     public class ConfigContainer : MessageBase
     {
 
-        public int primaryRecharging;
-        public int secondaryRecharging;
-        public int utilityRecharging;
-        public int specialRecharging;
-        public int equipmentRecharging;
+        public bool primaryRecharging;
+        public bool secondaryRecharging;
+        public bool utilityRecharging;
+        public bool specialRecharging;
+        public bool equipmentRecharging;
 
 
 
@@ -24,26 +24,53 @@ namespace CooldownOnHit
 
 
 
+        public override void Serialize(NetworkWriter writer)
+        {
+            writer.Write(primaryRecharging);
+            writer.Write(secondaryRecharging);
+            writer.Write(utilityRecharging);
+            writer.Write(specialRecharging);
+            writer.Write(equipmentRecharging);
+
+            writer.Write(primaryAmount);
+            writer.Write(secondaryAmount);
+            writer.Write(utilityAmount);
+            writer.Write(specialAmount);
+            writer.Write(equipmentAmount);
 
 
+        }
 
+        public override void Deserialize(NetworkReader reader)
+        {
+            primaryRecharging = reader.ReadBoolean();
+            secondaryRecharging = reader.ReadBoolean();
+            utilityRecharging = reader.ReadBoolean();
+            specialRecharging = reader.ReadBoolean();
+            equipmentRecharging = reader.ReadBoolean();
 
+            primaryAmount = reader.ReadSingle();
+            secondaryAmount = reader.ReadSingle();
+            utilityAmount = reader.ReadSingle();
+            specialAmount = reader.ReadSingle();
+            equipmentAmount = reader.ReadSingle();
+        }
 
 
         public String GetPrimary {
-            get => $"Primary Skills recharging: {   (primaryRecharging == 1 ? "Recharging" : "Not recharging")}: {primaryAmount} seconds";
+            get => $"Primary Skills recharging: {   (primaryRecharging ? "Recharging" : "Not recharging")}: {primaryAmount} seconds";
         }
         public String GetSecondary {
-            get => $"Secondary Skills recharging: { (secondaryRecharging == 1 ? "Recharging" : "Not recharging")}: {secondaryAmount} seconds";
+            get => $"Secondary Skills recharging: { (secondaryRecharging ? "Recharging" : "Not recharging")}: {secondaryAmount} seconds";
         }
         public String GetUtility {
-            get => $"Utility Skills recharging: {   (utilityRecharging == 1? "Recharging" : "Not recharging")}: {utilityAmount} seconds";
+            get => $"Utility Skills recharging: {   (utilityRecharging ? "Recharging" : "Not recharging")}: {utilityAmount} seconds";
         }
         public String GetSpecial {
-            get => $"Special Skills recharging: {   (specialRecharging == 1 ? "Recharging" : "Not recharging")}: {specialAmount} seconds";
+            get => $"Special Skills recharging: {   (specialRecharging ? "Recharging" : "Not recharging")}: {specialAmount} seconds";
         }
         public String GetEquipment {
-            get => $"Equipment Skills recharging: { (equipmentRecharging == 1 ? "Recharging" : "Not recharging")}: {equipmentAmount} seconds";
+            get => $"Equipment Skills recharging: { (equipmentRecharging ? "Recharging" : "Not recharging")}: {equipmentAmount} seconds";
         }
 
         public void SetPrimary(bool b, float f)
@@ -54,7 +81,7 @@ namespace CooldownOnHit
 
         public void SetPrimaryRecharging(bool b)
         {
-            this.primaryRecharging = b ? 1 : 0;
+            this.primaryRecharging = b;
         }
 
         public void SetPrimaryAmount(float f)
@@ -70,7 +97,7 @@ namespace CooldownOnHit
 
         public void SetSecondaryRecharging(bool b)
         {
-            this.secondaryRecharging = b ? 1 : 0;
+            this.secondaryRecharging = b;
         }
 
         public void SetSecondaryAmount(float f)
@@ -86,7 +113,7 @@ namespace CooldownOnHit
 
         public void SetUtilityRecharging(bool b)
         {
-            this.utilityRecharging = b ? 1 : 0;
+            this.utilityRecharging = b;
         }
 
         public void SetUtilityAmount(float f)
@@ -102,7 +129,7 @@ namespace CooldownOnHit
 
         public void SetSpecialRecharging(bool b)
         {
-            this.specialRecharging = b ? 1 : 0;
+            this.specialRecharging = b;
         }
 
         public void SetSpecialAmount(float f)
@@ -118,7 +145,7 @@ namespace CooldownOnHit
 
         public void SetEquipmentRecharging(bool b)
         {
-            this.equipmentRecharging = b ? 1 : 0;
+            this.equipmentRecharging = b;
         }
 
         public void SetEquipmentAmount(float f)
@@ -141,28 +168,28 @@ namespace CooldownOnHit
             var f = "Not recharging";
             return
                 $"Current config is:\n" +
-                $"Primary Skills recharging: {   (primaryRecharging == 1 ? t : f)}: {primaryAmount} seconds\n" +
-                $"Secondary Skills recharging: { (secondaryRecharging == 1 ? t : f)}: {secondaryAmount} seconds\n" +
-                $"Utility Skills recharging: {   (utilityRecharging == 1 ? t : f)}: {utilityAmount} seconds\n" +
-                $"Special Skills recharging: {   (specialRecharging == 1 ? t : f)}: {specialAmount} seconds\n" +
-                $"Equipment Skills recharging: { (equipmentRecharging == 1 ? t : f)}: {equipmentAmount} seconds";
+                $"Primary Skills recharging: {   (primaryRecharging ? t : f)}: {primaryAmount} seconds\n" +
+                $"Secondary Skills recharging: { (secondaryRecharging ? t : f)}: {secondaryAmount} seconds\n" +
+                $"Utility Skills recharging: {   (utilityRecharging ? t : f)}: {utilityAmount} seconds\n" +
+                $"Special Skills recharging: {   (specialRecharging ? t : f)}: {specialAmount} seconds\n" +
+                $"Equipment Skills recharging: { (equipmentRecharging ? t : f)}: {equipmentAmount} seconds";
         }
 
         public void SetDefault()
         {
-            primaryRecharging = 1;
+            primaryRecharging = true;
             primaryAmount = 0;
 
-            secondaryRecharging = 0;
+            secondaryRecharging = false;
             secondaryAmount = 1;
 
-            utilityRecharging = 1;
+            utilityRecharging = true;
             utilityAmount = 0;
 
-            specialRecharging = 0;
+            specialRecharging = false;
             specialAmount = 3;
 
-            equipmentRecharging = 1;
+            equipmentRecharging = true;
             equipmentAmount = 0;
 
         }
