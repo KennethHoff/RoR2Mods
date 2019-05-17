@@ -132,8 +132,8 @@ namespace CooldownOnHit
 
         public void Awake()
         {
-            RegisterMiniRpc();
             EnableEvents_Awake();
+            RegisterMiniRpc();
 
         }
 
@@ -162,16 +162,17 @@ namespace CooldownOnHit
         public void EnableEvents_Awake()
         {
             WrapConfig();
-
-            GetConfig();
-
-            On.RoR2.GenericSkill.RunRecharge += GenericSkill_RunRecharge;
-
             On.RoR2.Console.Awake += (orig, self) =>
             {
                 CommandHelper.RegisterCommands(self);
                 orig(self);
             };
+
+            GetConfig();
+
+            On.RoR2.GenericSkill.RunRecharge += GenericSkill_RunRecharge;
+
+
 
             On.EntityStates.SurvivorPod.Descent.OnEnter += (orig, self) =>
             {
