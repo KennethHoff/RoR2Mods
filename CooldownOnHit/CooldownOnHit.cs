@@ -1,18 +1,25 @@
-﻿using System;
-using BepInEx;
+﻿using BepInEx;
 using BepInEx.Configuration;
+using MiniRpcLib;
+using MiniRpcLib.Func;
+using MiniRpcLib.Action;
 using RoR2;
-using UnityEngine;
-using R2API;
+using System;
 using System.Reflection;
+using UnityEngine;
+using UnityEngine.Networking;
 using Utilities;
 
 namespace CooldownOnHit
 {
     [BepInDependency("com.bepis.r2api")]
-    [BepInPlugin("com.Modernkennnern.CooldownOnHit", "CooldownOnHit", "0.1.0")]
+    [BepInDependency(MiniRpcPlugin.Dependency)]
+    [BepInPlugin(ModGuid, ModName, ModVersion)]
     public class CooldownOnHit : BaseUnityPlugin
     {
+        private const string ModGuid = "com.Modernkennnern.CooldownOnHit";
+        private const string ModName = "CooldownOnHit";
+        private const string ModVersion = "0.2.0";
         // TODO: Redo the way cooldowns are displayed.
         // Currently, Huntress Glaive has 7second cooldown - it says 7 until you've hit enough times to get it to 6.
         // What I would like is to turn that number into a "Hits remaining" visual that, instead of telling you a (non-functioning) timer, tells you how many hits until the cooldown is off.
@@ -26,320 +33,501 @@ namespace CooldownOnHit
 
         // The ideal method for implementing would be: You have two parameters. The first is a GenericSkill that, when it hits an enemy, will reduce the cooldown of the second GenericSkill.
 
-        private static ConfigWrapper<bool> PrimarySkillRechargingConfig { get; set; }
-        private static ConfigWrapper<bool> SecondarySkillRechargingConfig { get; set; }
-        private static ConfigWrapper<bool> UtilitySkillRechargingConfig { get; set; }
-        private static ConfigWrapper<bool> SpecialSkillRechargingConfig { get; set; }
-        private static ConfigWrapper<bool> EquipmentRechargingConfig { get; set; }
+        // TODO: Change the hook from GenericSkill.RunRecharge => GenericSkill.FixedUpdate
 
-        private static ConfigWrapper<float> SecondarySkillCooldownReductionOnHitAmountConfig { get; set; }
-        private static ConfigWrapper<float> SpecialSkillCooldownReductionOnHitAmountConfig { get; set; }
-        private static ConfigWrapper<float> EquipmentCooldownReductionOnHitAmountConfig { get; set; }
+        // TODO: (LOW PRIORITY) Enable OnDisable support
 
-        private readonly SurvivorIndex[] workingSurvivors = new SurvivorIndex[] { SurvivorIndex.Huntress };
 
-        public float SecondaryAbilityCooldownReductionOnHitAmount {
-            get => SecondarySkillCooldownReductionOnHitAmountConfig.Value;
-            protected set => SecondarySkillCooldownReductionOnHitAmountConfig.Value = value;
-        }
 
-        public float SpecialAbilityCooldownReductionOnHitAmount {
-            get => SpecialSkillCooldownReductionOnHitAmountConfig.Value;
-            protected set => SpecialSkillCooldownReductionOnHitAmountConfig.Value = value;
-        }
-        public float EquipmentCooldownReductionOnHitAmount {
-            get => EquipmentCooldownReductionOnHitAmountConfig.Value;
-            protected set => EquipmentCooldownReductionOnHitAmountConfig.Value = value;
-        }
+        // Get Local User with: LocalUserManager.GetFIrstLocalUser(), or NetworkUser.inputPlayer, or using the Camera Rig Controller (Not sure about the specifics - I will probably found it if I look
 
-        public bool PrimarySkillRecharging {
-            get => PrimarySkillRechargingConfig.Value;
-            protected set => PrimarySkillRechargingConfig.Value = value;
+
+
+        public static bool PrimarySkillRecharging {
+            get => savedConfig.primaryRecharging;
+            protected set => savedConfig.SetPrimaryRecharging(value);
         }
-        public bool SecondarySkillRecharging {
-            get => SecondarySkillRechargingConfig.Value;
-            protected set => SecondarySkillRechargingConfig.Value = value;
-        }
-        public bool UtilitySkillRecharging {
-            get => UtilitySkillRechargingConfig.Value;
-            protected set => UtilitySkillRechargingConfig.Value = value;
-        }
-        public bool SpecialSkillRecharging {
-            get => SpecialSkillRechargingConfig.Value;
-            protected set => SpecialSkillRechargingConfig.Value = value;
-        }
-        public bool EquipmentRecharging {
-            get => EquipmentRechargingConfig.Value;
-            protected set => EquipmentRechargingConfig.Value = value;
+        public static float PrimarySkillCooldownReductionOnHitAmount {
+            get => savedConfig.primaryAmount;
+            protected set => savedConfig.SetPrimaryAmount(value);
         }
 
 
-        public SkillLocator SkillLoc {
-            get => characterMaster.GetBody().GetComponent<SkillLocator>();
+        public static bool SecondarySkillRecharging {
+            get => savedConfig.secondaryRecharging;
+            protected set => savedConfig.SetSecondaryRecharging(value);
+        }
+        public static float SecondarySkillCooldownReductionOnHitAmount {
+            get => savedConfig.secondaryAmount;
+            protected set => savedConfig.SetSecondaryAmount(value);
         }
 
-        public GenericSkill PrimarySkill {
-            get => SkillLoc.GetSkill(SkillSlot.Primary);
+
+        public static bool UtilitySkillRecharging {
+            get => savedConfig.utilityRecharging;
+            protected set => savedConfig.SetUtilityRecharging(value);
         }
-        public GenericSkill SecondarySkill {
-            get => SkillLoc.GetSkill(SkillSlot.Secondary);
+        public static float UtilitySkillCooldownReductionOnHitAmount {
+            get => savedConfig.utilityAmount;
+            protected set => savedConfig.SetUtilityAmount(value);
         }
-        public GenericSkill UtilitySkill {
-            get => SkillLoc.GetSkill(SkillSlot.Utility);
+
+
+        public static bool SpecialSkillRecharging {
+            get => savedConfig.specialRecharging;
+            protected set => savedConfig.SetSpecialRecharging(value);
         }
-        public GenericSkill SpecialSkill {
-            get => SkillLoc.GetSkill(SkillSlot.Special);
+        public static float SpecialSkillCooldownReductionOnHitAmount {
+            get => savedConfig.specialAmount;
+            protected set => savedConfig.SetSpecialAmount(value);
         }
+
+
+        public static bool EquipmentRecharging {
+            get => savedConfig.equipmentRecharging;
+            protected set => savedConfig.SetEquipmentRecharging(value);
+        }
+        public static float EquipmentCooldownReductionOnHitAmount {
+            get => savedConfig.equipmentAmount;
+            protected set => savedConfig.SetEquipmentAmount(value);
+        }
+
+
+        public IRpcAction<ConfigContainer> ConfigRequestClient { get; set; }
+
+
+        public IRpcFunc<int, CharacterSupportContainer> CharacterSupportedRequestHost { get; set; }
+
+        public IRpcFunc<int, int> SurvivorIndexRequestHost { get; set; }
+
+        public IRpcAction<int> CooldownRequestClient { get; set; }
+
+        public static bool DebugActive = false;
+
+        private bool runstarted = false;
+
+
+
+
+        public readonly SurvivorIndex[] workingSurvivors = new SurvivorIndex[] { SurvivorIndex.Huntress };
+
 
         private float newRechargeStopwatch;
         private float newFinalRechargeInterval;
 
-        private CharacterMaster characterMaster;
-        private SurvivorIndex survivorIndex;
 
-        private bool characterSupported;
+
+        private bool localPlayercharacterSupported;
+
+        private CharacterMaster localPlayerCharacterMaster;
+        private SurvivorIndex localPlayerSurvivorIndex;
+
+
+        public SkillLocator localPlayerSkillLoc;
+
+        private GenericSkill localPlayerPrimarySkill;
+        private GenericSkill localPlayerSecondarySkill;
+        private GenericSkill localPlayerUtilitySkill;
+        private GenericSkill localPlayerSpecialSkill;
 
         public void Awake()
         {
-            SetConfigWraps();
-
-            EnableEvents();
-            ShowStats();
+            EnableEvents_Awake();
+            RegisterMiniRpc();
 
         }
 
-        private void Update()
+        public void SetDefaultValues()
         {
-            //if (Input.GetKeyDown(KeyCode.F2))
-            //{
-            //    CheckSupport();
-            //}
+
+            newRechargeStopwatch = float.NaN;
+            newFinalRechargeInterval = float.NaN;
+    }
+
+        private void GetConfig()
+        {
+            if (DebugActive) Debug.Log("Loading Config");
+            savedConfig = LoadConfigFromFile();
+            if (DebugActive) Debug.Log("Config loaded\n" + savedConfig.ToString());
         }
 
-        private void ShowStats()
+        private void SendConfigToPlayers()
         {
-            Chat.AddMessage(Stats);
-        }
-
-        private void EnableEvents()
-        {
-           
-            // This will load at the start of every map with a Teleporter (presumably)
-            On.RoR2.SceneDirector.PlaceTeleporter += (orig, self) =>
+            if (NetworkServer.active)
             {
-                CheckCharacterMaster();
-                SetStartStats();
-            };
+                ConfigRequestClient.Invoke(savedConfig);
+            }
+        }
 
-            On.RoR2.GenericSkill.RunRecharge += GenericSkill_RunRecharge;
-
+        public void EnableEvents_Awake()
+        {
+            WrapConfig();
             On.RoR2.Console.Awake += (orig, self) =>
             {
                 CommandHelper.RegisterCommands(self);
                 orig(self);
             };
 
+            GetConfig();
+
+            On.RoR2.GenericSkill.RunRecharge += GenericSkill_RunRecharge;
+
+
+
+            On.EntityStates.SurvivorPod.Descent.OnEnter += (orig, self) =>
+            {
+                orig(self);
+                StartRun();
+            };
+
+            On.EntityStates.SurvivorPod.Landed.OnEnter += (orig, self) =>
+            {
+                orig(self);
+                StartStage();
+            };
+
+
+            On.RoR2.Stage.RespawnCharacter += (orig, self, CharacterMaster) =>
+            {
+                orig(self, CharacterMaster);
+                if (!runstarted) return;
+                if (DebugActive) Debug.Log("RoR2.Stage.RespawnCharacter");
+                StartStage();
+            };
+
+
             // Huntress
             On.RoR2.Orbs.LightningOrb.OnArrival += LightningOrb_OnArrival;
             On.RoR2.Orbs.ArrowOrb.OnArrival += ArrowOrb_OnArrival;
 
-            // Commando
-
+            //// Commando
             //On.RoR2.BulletAttack.DefaultHitCallback += BulletAttack_DefaultHitCallback;
 
         }
 
-        private bool BulletAttack_DefaultHitCallback(On.RoR2.BulletAttack.orig_DefaultHitCallback orig, BulletAttack self, ref BulletAttack.BulletHit hitInfo)
+
+
+        public void StartRun()
+        {
+            SetDefaultValues();
+            SendConfigToPlayers();
+            runstarted = true;
+            //GetLocalPlayerInfo();
+            //CheckLocalCharacterSupported();
+        }
+
+
+        private void StartStage()
+        {
+            GetLocalPlayerInfo();
+            CheckLocalCharacterSupported();
+        }
+
+        private void RegisterMiniRpc()
+        {
+
+            var miniRpc = MiniRpc.CreateInstance(ModGuid);
+
+            ConfigRequestClient = miniRpc.RegisterAction(Target.Client, (NetworkUser user, ConfigContainer configContainer ) =>
+            {
+                if (DebugActive) Debug.Log("Saved config:\n" + savedConfig.ToString());
+                currentRunConfig = configContainer;
+                if (DebugActive) Debug.Log("Current config:\n" + currentRunConfig.ToString());
+            });
+
+            CharacterSupportedRequestHost = miniRpc.RegisterFunc<int, CharacterSupportContainer>(Target.Server, (NetworkUser user, int i) =>
+            {
+                CharacterSupportContainer ret = new CharacterSupportContainer();
+                var index = GetSurvivorIndex(user.master);
+                var supported = CheckCharacterSupport(index);
+
+                ret.index = (int)index;
+                ret.supported = supported;
+
+
+                if (DebugActive) Debug.Log($"[Host]: Client {user} sent me {index}. It is {(supported ? "" : "not")} supported");
+                return ret;
+            });
+
+            SurvivorIndexRequestHost = miniRpc.RegisterFunc<int, int>(Target.Server, (NetworkUser user, int i) =>
+            {
+                var index = GetSurvivorIndex(user.master);
+                return (int)index;
+            });
+
+            CooldownRequestClient = miniRpc.RegisterAction<int>(Target.Client, (NetworkUser user, int i) =>
+            {
+                var slot = (SkillSlot)i;
+
+                switch (slot)
+                {
+                    case SkillSlot.Primary:
+                        AlterCooldown(localPlayerPrimarySkill, currentRunConfig.primaryAmount);
+                        break;
+                    case SkillSlot.Secondary:
+                        AlterCooldown(localPlayerSecondarySkill, currentRunConfig.secondaryAmount);
+                        break;
+                    case SkillSlot.Utility:
+                        AlterCooldown(localPlayerUtilitySkill, currentRunConfig.utilityAmount);
+                        break;
+                    case SkillSlot.Special:
+                        AlterCooldown(localPlayerSpecialSkill, currentRunConfig.specialAmount);
+                        break;
+                    case SkillSlot.None:
+                        if (DebugActive) Debug.LogError("Sent Skillslot None");
+                        break;
+                }
+            });
+
+        }
+
+        public void Update()
+        {
+            if (!DebugActive) return;
+            if (Input.GetKeyDown(KeyCode.F2))
+            {
+                GetLocalPlayerInfo();
+
+                CheckLocalCharacterSupported();
+
+
+                var stringerino = "Pressed F2";
+                if (NetworkServer.active)
+                {
+                    stringerino += " on server";
+                }
+                else
+                {
+                    stringerino += " on client";
+                }
+                if (DebugActive) Chat.AddMessage(stringerino);
+
+
+                if (DebugActive) Chat.AddMessage("Survivor: " + localPlayerSurvivorIndex.ToString() + " supported? " + localPlayercharacterSupported.ToString());
+            }
+        }
+
+        public void GetLocalPlayerInfo()
+        {
+            if (NetworkServer.active)
+            {
+                if (DebugActive) Debug.Log("Getting LocalPlayerCharacterMaster on server");
+                localPlayerCharacterMaster = LocalUserManager.GetFirstLocalUser().cachedMasterController.master;
+                if (DebugActive) Debug.Log($"Got [{localPlayerCharacterMaster}])");
+            }
+            else if (NetworkClient.active)
+            {
+                if (DebugActive) Debug.Log("Getting LocalPlayerCharacterMaster on client");
+                localPlayerCharacterMaster = LocalUserManager.GetFirstLocalUser().cachedMasterController.master;
+                if (DebugActive) Debug.Log($"Got [{localPlayerCharacterMaster}])");
+            }
+
+            if (localPlayerCharacterMaster == null)
+            {
+                if (DebugActive) Debug.LogWarning("CharacterMaster not set!");
+            }
+
+            localPlayerSkillLoc = GetSkillLoc(localPlayerCharacterMaster);
+
+            Chat_GetLocalPlayerInfo();
+
+            GetLocalPlayerSkills();
+
+        }
+
+        private void GetLocalPlayerSkills()
+        {
+            localPlayerPrimarySkill = localPlayerSkillLoc.primary;
+            localPlayerSecondarySkill = localPlayerSkillLoc.secondary;
+            localPlayerUtilitySkill = localPlayerSkillLoc.utility;
+            localPlayerSpecialSkill = localPlayerSkillLoc.special;
+        }
+
+
+        public void Chat_GetLocalPlayerInfo()
+        {
+            if (DebugActive) Chat.AddMessage("You are playing as: " + localPlayerSurvivorIndex);
+        }
+
+
+
+        private void ReduceCooldown(GenericSkill skill, float amount)
+        {
+            AlterSkillCooldown(skill, amount);
+        }
+
+        public static SkillLocator GetSkillLoc(CharacterMaster master)
+        {
+            if (DebugActive) Debug.Log("[GetSkillLoc]: Master: " + master.ToString());
+            CharacterBody body = master.GetBody();
+            if (DebugActive) Debug.Log("[GetSkillLoc]: Character Body: " + body.ToString());
+            SkillLocator locator = body.GetComponent<SkillLocator>();
+            if (DebugActive) Debug.Log("[GetSkillLoc]: Primary skill: " + locator.primary.name.ToString());
+            return locator;
+        }
+
+        public bool BulletAttack_DefaultHitCallback(On.RoR2.BulletAttack.orig_DefaultHitCallback orig, BulletAttack self, ref BulletAttack.BulletHit hitInfo)
         {
             var b = orig(self, ref hitInfo);
 
-            if  (!hitInfo.entityObject.GetComponent<TeamComponent>() )
+            if (!hitInfo.entityObject.GetComponent<TeamComponent>())
             {
                 return b;
             }
 
             if (hitInfo.entityObject.GetComponent<TeamComponent>().teamIndex == TeamIndex.Monster)
             {
-                Debug.Log("Hit a monster!");
+                if (DebugActive) Debug.Log("Hit a monster!");
             }
 
             return b;
         }
 
-        private void SetStartStats()
+        public bool CanAffectCooldown(GenericSkill skill)
         {
-            CheckSupport();
-
-            newFinalRechargeInterval = float.NaN;
-            newRechargeStopwatch = float.NaN;
-
-            Debug.Log("CooldownOnHit started");
+            if (
+                (skill == localPlayerPrimarySkill && currentRunConfig.primaryAmount == 0) ||
+                (skill == localPlayerSecondarySkill && currentRunConfig.secondaryAmount == 0) ||
+                (skill == localPlayerUtilitySkill && currentRunConfig.utilityAmount == 0) ||
+                (skill == localPlayerSpecialSkill && currentRunConfig.specialAmount == 0))
+            {
+                return false;
+            }
+            else
+            {
+                return true;
+            }
         }
+        
 
-        private string Stats {
-             get => "Primary(" + PrimarySkillRecharging   + ")"   +"\n" +
-                "Secondary("   + SecondarySkillRecharging + "): " + SecondaryAbilityCooldownReductionOnHitAmount.ToString() + "\n" +
-                "Utility("     + UtilitySkillRecharging   + ")" + "\n" +
-                "Special("     + SpecialSkillRecharging   + "): " + SpecialAbilityCooldownReductionOnHitAmount.ToString()   + "\n" +
-                "Equipment("   + EquipmentRecharging      + ")";
-    }
 
-        private void SetConfigWraps()
-        {
-            PrimarySkillRechargingConfig = Config.Wrap(
-                "Cooldowns",
-                "PrimarySkillRecharging",
-                "Enables normal recharging of primary skill",
-                true);
-            SecondarySkillRechargingConfig = Config.Wrap(
-                "Cooldowns",
-                "SecondarySkillRecharging",
-                "Enables normal recharging of Secondary Skill",
-                false);
-            UtilitySkillRechargingConfig = Config.Wrap(
-                "Cooldowns",
-                "UtilitySkillRecharging",
-                "Enables normal recharging of Utility skills",
-                true);
-            SpecialSkillRechargingConfig = Config.Wrap(
-                "Cooldowns",
-                "SpecialSkillRecharging",
-                "Enables normal recharging of Special Skills",
-                false);
-            EquipmentRechargingConfig = Config.Wrap(
-                "Cooldowns",
-                "EquipmentRecharging",
-                "W.I.P - Cannot currently be disabled with this mod (Coming in a future major update)\nEnables normal recharging of Equipment",
-                true);
-
-            SecondarySkillCooldownReductionOnHitAmountConfig = Config.Wrap(
-                "Cooldowns",
-                "SecondaryAbilityCooldownReductionOnHitAmount",
-                "How many seconds to reduce the Secondary skill(RMB) cooldown by on each hit with the Primary skill.",
-                0.5f);
-
-            SpecialSkillCooldownReductionOnHitAmountConfig = Config.Wrap(
-                "Cooldowns",
-                "SpecialAbilityCooldownReductionOnHitAmount",
-                "How many seconds to reduce the Special Skill(R) cooldown by on each hit with the Secondary skill.",
-                2.5f);
-
-            EquipmentCooldownReductionOnHitAmountConfig = Config.Wrap(
-                "Cooldowns",
-                "EquipmentCooldownReductionOnHitAmount",
-                "How many seconds to reduce the Equipment(Q) cooldown by on each hit with the ??? [Special Skill feels too limiting. All skills? Would like some suggestions here",
-                1f);
-        }
-
-        private void GenericSkill_RunRecharge(On.RoR2.GenericSkill.orig_RunRecharge orig, GenericSkill skill, float dt)
+        // Client tells the server when he wants to recharge. Server responds with a the amount of cooldown to reduce the skill by.
+        public void GenericSkill_RunRecharge(On.RoR2.GenericSkill.orig_RunRecharge orig, GenericSkill skill, float dt)
         {
 
-
-            if (!characterSupported)
+            if (!localPlayercharacterSupported)
             {
                 orig(skill, dt);
                 return;
             }
 
-
-
-            // If 'self' is an ability that should be recharging, do the normal RunRecharge (And await further instructions)
-            if (
-                (skill == PrimarySkill && PrimarySkillRecharging) ||
-                (skill == SecondarySkill && SecondarySkillRecharging) ||
-                (skill == UtilitySkill && UtilitySkillRecharging) ||
-                (skill == SpecialSkill && SpecialSkillRecharging))
+            if (CanRecharge(skill))
             {
-
                 orig(skill, dt);
-
-                // If the skill should be recharging based on hits as well, do my weird RunRecharge, otherwise return
-                if (
-                    (skill == SecondarySkill && SecondaryAbilityCooldownReductionOnHitAmount == 0) ||
-                    (skill == SpecialSkill && SpecialAbilityCooldownReductionOnHitAmount == 0))
-                {
-                    return;
-                }
+            }
+            else if (CanAddCharge(skill))
+            {
+                AddCharge(skill);
             }
 
+            if (CanAffectCooldown(skill))
+            {
+                AffectCooldown(skill, dt);
+            }
+        }
+
+        private void AffectCooldown(GenericSkill skill, float dt)
+        {
             if (skill.stock >= skill.maxStock) return;
 
             // Not entirely sure about this next line..
             var dt2 = Time.fixedDeltaTime;
             if (dt == dt2) return;
 
-            //Chat.AddMessage("Secondary or Special currently on cooldown");
+            ReduceCooldown(skill, dt);
+        }
 
-            var skillType = typeof(RoR2.GenericSkill);
+
+        // TODO: This has to be redone - Create my own 'StopWatch'.
+        public void AlterSkillCooldown(GenericSkill skill, float amount)
+        {
+            var skillType = typeof(GenericSkill);
 
             var rechargeStopwatchField = skillType.GetField("rechargeStopwatch", BindingFlags.NonPublic | BindingFlags.Instance);
-            var finalRechargeIntervalField = skillType.GetField("finalRechargeInterval", BindingFlags.NonPublic | BindingFlags.Instance);
-            var restockSteplikeMethod = skillType.GetMethod("RestockSteplike", BindingFlags.NonPublic | BindingFlags.Instance);
+            float rechargeStopwatchValue = (float)rechargeStopwatchField.GetValue(skill);
 
-            if (newRechargeStopwatch == float.NaN) newRechargeStopwatch = GetPrivateFloatFromGenericSkill(skill, "rechargeStopwatch");
-            if (newFinalRechargeInterval == float.NaN) newFinalRechargeInterval = GetPrivateFloatFromGenericSkill(skill, "finalRechargeInterval");
+            if (newRechargeStopwatch == float.NaN) newRechargeStopwatch = GetPrivateFloatFromGenericSkillReflection(skill, "rechargeStopwatch");
+            if (newFinalRechargeInterval == float.NaN) newFinalRechargeInterval = GetPrivateFloatFromGenericSkillReflection(skill, "finalRechargeInterval");
 
             if (!skill.beginSkillCooldownOnSkillEnd || (skill.stateMachine.state.GetType() != skill.activationState.stateType))
             {
-                rechargeStopwatchField.SetValue(skill, (float)rechargeStopwatchField.GetValue(skill) + dt);
+                var finalValue = rechargeStopwatchValue + amount;
+                rechargeStopwatchField.SetValue(skill, finalValue);
             }
-            if ((float)rechargeStopwatchField.GetValue(skill) >= (float)finalRechargeIntervalField.GetValue(skill))
+            if (CanAddCharge(skill))
             {
-                restockSteplikeMethod.Invoke(skill, null);
-            }
-        }
-
-        private void CheckCharacterMaster()
-        {
-            if (characterMaster == null)
-            {
-                GetSurvivorInfo();
+                AddCharge(skill);
             }
         }
 
-        private void CheckSupport()
+        private void AddCharge(GenericSkill skill)
         {
-            var find = Array.IndexOf<SurvivorIndex>(workingSurvivors, survivorIndex);
-            var workingSurvivorString = string.Join(", ", workingSurvivors);
-            if (find == (int)SurvivorIndex.None)
+            var skillType = typeof(GenericSkill);
+            var restockSteplikeMethod = skillType.GetMethod("RestockSteplike", BindingFlags.NonPublic | BindingFlags.Instance);
+            restockSteplikeMethod.Invoke(skill, null);
+        }
+
+        private static bool CanAddCharge(GenericSkill skill)
+        {
+            var skillType = typeof(GenericSkill);
+
+            var rechargeStopwatchField = skillType.GetField("rechargeStopwatch", BindingFlags.NonPublic | BindingFlags.Instance);
+            float rechargeStopwatchValue = (float)rechargeStopwatchField.GetValue(skill);
+            var finalRechargeIntervalField = skillType.GetField("finalRechargeInterval", BindingFlags.NonPublic | BindingFlags.Instance);
+            float finalRechargeIntervalValue = (float)finalRechargeIntervalField.GetValue(skill);
+
+            return (rechargeStopwatchValue >= finalRechargeIntervalValue);
+        }
+        private void CheckLocalCharacterSupported()
+        {
+            CharacterSupportedRequestHost.Invoke((int)localPlayerSurvivorIndex, result =>
             {
-                Chat.AddMessage($"This mod currently does not work with {survivorIndex}\nIt currently only works with {workingSurvivorString}");
-                characterSupported = false;
+                if (DebugActive) Debug.Log(localPlayerSurvivorIndex.ToString());
+                localPlayercharacterSupported = result.supported;
+
+                localPlayerSurvivorIndex = (SurvivorIndex)result.index;
+
+                if (DebugActive) Debug.Log($"[Client]: Server sent me (Index: {result.index}, result: {result.supported} on my request on CharacterSupport.");
+            });
+        }
+
+        public bool CheckCharacterSupport(SurvivorIndex index)
+        {
+            var find = Array.IndexOf<SurvivorIndex>(workingSurvivors, index);
+
+            if (find == -1)
+            {
+                return false;
             }
             else
             {
-                Chat.AddMessage($"This mod currently does work with {survivorIndex}\nIt currently only works with {workingSurvivorString}");
-                characterSupported = true;
+                return true;
             }
+
         }
 
-        private void GetSurvivorInfo()
-        {
-            characterMaster = PlayerCharacterMasterController.instances[0].master;
-            survivorIndex = GetSurvivorIndex(characterMaster);
-        }
-
-        private SurvivorIndex GetSurvivorIndex(CharacterMaster master)
+        public SurvivorIndex GetSurvivorIndex(CharacterMaster master)
         {
             var bodyPrefab = master.bodyPrefab;
+            if (DebugActive) Debug.Log("Body prefab:" + bodyPrefab);
             var def = SurvivorCatalog.FindSurvivorDefFromBody(bodyPrefab);
             var index = def.survivorIndex;
-            
+
             return index;
         }
 
-        public float GetSkillCooldown(GenericSkill skill)
+        public float GetSkillCooldownReflection(GenericSkill skill)
         {
-            float value = GetPrivateFloatFromGenericSkill(skill, "finalRechargeInterval");
+            float value = GetPrivateFloatFromGenericSkillReflection(skill, "finalRechargeInterval");
             return value;
         }
-        public float GetRechargeTimer(GenericSkill skill)
+        public float GetRechargeTimerReflection(GenericSkill skill)
         {
-            float value = GetPrivateFloatFromGenericSkill(skill, "rechargeStopwatch");
+            float value = GetPrivateFloatFromGenericSkillReflection(skill, "rechargeStopwatch");
             return value;
         }
 
-        public float GetPrivateFloatFromGenericSkill(GenericSkill skill, string field)
+        public float GetPrivateFloatFromGenericSkillReflection(GenericSkill skill, string field)
         {
             return (float)typeof(RoR2.GenericSkill).GetField(field, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(skill);
         }
@@ -349,112 +537,106 @@ namespace CooldownOnHit
             AlterCooldown(skill, amount);
         }
 
-        public void AlterCooldownByTotalPercentage(GenericSkill skill, float percent)
-        {
-            var amount = GetSkillCooldown(skill) * percent;
-            AlterCooldown(skill, amount);
-        }
-
         public void AlterCooldown(GenericSkill skill, float amount)
         {
             skill.RunRecharge(amount);
-            //AlteredCooldownChatMessage(skill, amount);
         }
 
         private void AlteredCooldownChatMessage(GenericSkill skill, float amount)
         {
             var roundedNumber = decimal.Round((decimal)amount, 1, System.MidpointRounding.AwayFromZero);
             string line0 = "Skill: " + skill.skillName;
-            string line1 = "Total cooldown: " + GetSkillCooldown(skill).ToString();
+            string line1 = "Total cooldown: " + GetSkillCooldownReflection(skill).ToString();
             string line2 = "Cooldown Reduction: " + roundedNumber;
             string line3 = "Remaining Cooldown: " + skill.cooldownRemaining;
-            Chat.AddMessage(line0 + "\n" + line1 + "\n" + line2 + "\n" + line3);
+            if (DebugActive) Chat.AddMessage(line0 + "\n" + line1 + "\n" + line2 + "\n" + line3);
+        }
+
+        private void SendAlterCooldownRequestToClient(SkillSlot slot, NetworkUser user)
+        {
+            CooldownRequestClient.Invoke((int)slot, (user));
         }
 
         private void ArrowOrb_OnArrival(On.RoR2.Orbs.ArrowOrb.orig_OnArrival orig, RoR2.Orbs.ArrowOrb self)
         {
             orig(self);
 
-            if (SecondaryAbilityCooldownReductionOnHitAmount == 0) return;
+            if (currentRunConfig.secondaryAmount == 0) return;
 
-            var skillLocator = self.attacker.GetComponent<SkillLocator>();
-            var skill = skillLocator.secondary;
-            AlterCooldownByFlatAmount(skill, SecondaryAbilityCooldownReductionOnHitAmount);
+            SkillLocator skillLocator = self.attacker.GetComponent<SkillLocator>();
+            GenericSkill skill = skillLocator.secondary;
+
+            CreateAlterCooldownRequest(skillLocator, skill);
+
         }
+
+        private void CreateAlterCooldownRequest(SkillLocator skillLocator, GenericSkill skill)
+        {
+
+            SkillSlot slot = skillLocator.FindSkillSlot(skill);
+            NetworkUser user = GetUser(skillLocator);
+            SendAlterCooldownRequestToClient(slot, user);
+        }
+
+        private static NetworkUser GetUser(SkillLocator skillLocator)
+        {
+            var playerBody = skillLocator.GetComponent<CharacterBody>();
+            NetworkUser user = null;
+            var instancesList = NetworkUser.readOnlyInstancesList;
+            for (int i = 0; i < instancesList.Count; i++)
+            {
+                if (instancesList[i].GetCurrentBody() == playerBody)
+                {
+                    user = instancesList[i];
+                }
+            }
+            if (user == null)
+            {
+                if (DebugActive) Debug.LogWarning("User is null");
+            }
+
+            return user;
+        }
+
         private void LightningOrb_OnArrival(On.RoR2.Orbs.LightningOrb.orig_OnArrival orig, RoR2.Orbs.LightningOrb self)
         {
             orig(self);
 
-            if (SpecialAbilityCooldownReductionOnHitAmount == 0) return;
+            if (DebugActive) Debug.Log("Lightning orb has arrived");
+
 
             if (self.lightningType == RoR2.Orbs.LightningOrb.LightningType.HuntressGlaive)
             {
+
+                if (currentRunConfig.specialAmount == 0) return;
                 var skillLocator = self.attacker.GetComponent<SkillLocator>();
                 var skill = skillLocator.special;
 
-                Debug.Log(skill);
-
-                AlterCooldownByFlatAmount(skill, SpecialAbilityCooldownReductionOnHitAmount);
+                CreateAlterCooldownRequest(skillLocator, skill);
+            }
+        }
+        private bool CanRecharge(GenericSkill skill)
+        {
+            if (
+                (skill == localPlayerPrimarySkill && currentRunConfig.primaryRecharging) ||
+                (skill == localPlayerSecondarySkill && currentRunConfig.secondaryRecharging) ||
+                (skill == localPlayerUtilitySkill && currentRunConfig.utilityRecharging) ||
+                (skill == localPlayerSpecialSkill && currentRunConfig.specialRecharging))
+            {
+                return true;
+            }
+            else
+            {
+                return false;
             }
         }
 
-
-        private static String SeeConfig {
-            get => $"Current config is:\n" +
-                $"Primary Skills recharging: { (PrimarySkillRechargingConfig.Value == true ? "Enabled" : "Disabled")}\n" +
-                $"Secondary Skills recharging: { (SecondarySkillRechargingConfig.Value == true ? "Enabled" : "Disabled")}: {(SecondarySkillCooldownReductionOnHitAmountConfig.Value)}\n" +
-                $"Utility Skills recharging: { (UtilitySkillRechargingConfig.Value == true ? "Enabled" : "Disabled")}\n" +
-                $"Special Skills recharging: { (SpecialSkillRechargingConfig.Value == true ? "Enabled" : "Disabled")}: {(SpecialSkillCooldownReductionOnHitAmountConfig.Value)}\n" +
-                $"Equipment Skills recharging: { (EquipmentRechargingConfig.Value == true ? "Enabled" : "Disabled")}\n";
-        }
-
-
-        private static void SetDefaultConfig()
-        {
-            PrimarySkillRechargingConfig.Value = true;
-            SecondarySkillRechargingConfig.Value = false;
-            UtilitySkillRechargingConfig.Value = true;
-            SpecialSkillRechargingConfig.Value = false;
-            EquipmentRechargingConfig.Value = true;
-
-            SecondarySkillCooldownReductionOnHitAmountConfig.Value = 1;
-            SpecialSkillCooldownReductionOnHitAmountConfig.Value = 3f;
-        }
-
-
-
-        [ConCommand(commandName = "COH_Primary", flags = ConVarFlags.None, helpText = "Primary Skill configurations.")]
+        [ConCommand(commandName = "coh_primary", flags = ConVarFlags.None, helpText = "Primary Skill configurations.")]
         private static void CCPrimary(ConCommandArgs args)
         {
             if (args.Count == 0)
             {
-                Debug.Log($"Primary Skills recharging: { (PrimarySkillRechargingConfig.Value == true ? "Enabled" : "Disabled")}");
-            }
-            else if (args.Count == 1)
-            {
-                if (!bool.TryParse(args[0], out var recharging))
-                {
-                    Debug.Log("First argument was invalid. It should be a boolean (True / False)");
-                    return;
-                }
-
-                PrimarySkillRechargingConfig.Value = recharging;
-
-                Debug.Log($"Primary Skills recharging: { (PrimarySkillRechargingConfig.Value == true ? "Enabled" : "Disabled")}");
-            }
-            else
-            {
-                Debug.Log("One arguments expected. A boolean (true or False)");
-            }
-        }
-
-        [ConCommand(commandName = "COH_Secondary", flags = ConVarFlags.None, helpText = "Secondary Skill configurations.")]
-        private static void CCSecondary(ConCommandArgs args)
-        {
-
-            if (args.Count == 0)
-            {
-                Debug.Log($"Primary Skills recharging: { (SecondarySkillRechargingConfig.Value == true ? "Enabled" : "Disabled")}");
+                Debug.Log(savedConfig.GetPrimary);
             }
             else if (args.Count == 2)
             {
@@ -469,11 +651,15 @@ namespace CooldownOnHit
                     return;
                 }
 
-                SecondarySkillRechargingConfig.Value = recharging;
-                SecondarySkillCooldownReductionOnHitAmountConfig.Value = amount;
+                savedConfig.SetPrimary(recharging, amount);
+                SaveConfigToFile(savedConfig);
 
+                if (NetworkServer.active)
+                {
+                    LoadConfigFromFile();
+                }
 
-                Debug.Log($"Primary Skills recharging: { (SecondarySkillRechargingConfig.Value == true ? "Enabled" : "Disabled")}: {SecondarySkillCooldownReductionOnHitAmountConfig.Value} seconds");
+                Debug.Log(savedConfig.GetPrimary + "\nThis only affects the current run if you are a host. Otherwise it just changes the config file.");
             }
             else
             {
@@ -481,101 +667,293 @@ namespace CooldownOnHit
             }
         }
 
-        [ConCommand(commandName = "COH_Utility", flags = ConVarFlags.None, helpText = "Utility Skill configurations.")]
-        private static void CCUtility(ConCommandArgs args)
+        //[ConCommand(commandName = "coh_secondary", flags = ConVarFlags.None, helpText = "Secondary Skill configurations.")]
+        //private static void CCSecondary(ConCommandArgs args)
+        //{
+        //    if (args.Count == 0)
+        //    {
+        //         Debug.Log(savedConfig.GetSecondary);
+        //    }
+        //    else if (args.Count == 2)
+        //    {
+        //        if (!bool.TryParse(args[0], out var recharging))
+        //        {
+        //             Debug.Log("First argument was invalid. It should be a boolean (True / False)");
+        //            return;
+        //        }
+        //        if (!float.TryParse(args[1], out var amount))
+        //        {
+        //             Debug.Log("Second argument was invalid. It should be a positive float (any number 0 or above)");
+        //            return;
+        //        }
+
+        //        savedConfig.SetSecondary(recharging, amount);
+        //        SaveConfigToFile(savedConfig);
+
+        //        if (NetworkServer.active)
+        //        {
+        //            LoadConfigFromFile();
+        //        }
+
+        //         Debug.Log(savedConfig.GetSecondary + "\nThis only affects the current run if you are a host. Otherwise it just changes the config file.");
+        //    }
+        //    else
+        //    {
+        //         Debug.Log("Two arguments expected. A boolean (true or False), and a positive float (any number 0 or higher)");
+        //    }
+        //}
+
+        //[ConCommand(commandName = "coh_utility", flags = ConVarFlags.None, helpText = "Utility Skill configurations.")]
+        //private static void CCUtility(ConCommandArgs args)
+        //{
+        //    if (args.Count == 0)
+        //    {
+        //         Debug.Log(savedConfig.GetUtility);
+        //    }
+        //    else if (args.Count == 2)
+        //    {
+        //        if (!bool.TryParse(args[0], out var recharging))
+        //        {
+        //             Debug.Log("First argument was invalid. It should be a boolean (True / False)");
+        //            return;
+        //        }
+        //        if (!float.TryParse(args[1], out var amount))
+        //        {
+        //             Debug.Log("Second argument was invalid. It should be a positive float (any number 0 or above)");
+        //            return;
+        //        }
+
+        //        savedConfig.SetUtility(recharging, amount);
+        //        SaveConfigToFile(savedConfig);
+
+        //        if (NetworkServer.active)
+        //        {
+        //            LoadConfigFromFile();
+        //        }
+
+        //         Debug.Log(savedConfig.GetUtility + "\nThis only affects the current run if you are a host. Otherwise it just changes the config file.");
+        //    }
+        //    else
+        //    {
+        //         Debug.Log("Two arguments expected. A boolean (true or False), and a positive float (any number 0 or higher)");
+        //    }
+        //     Debug.Log("One arguments expected. A boolean (true or False)");
+        //}
+
+        //[ConCommand(commandName = "coh_special", flags = ConVarFlags.None, helpText = "Sets Special Skill configurations.")]
+        //private static void CCSpecial(ConCommandArgs args)
+        //{
+        //    if (args.Count == 0)
+        //    {
+        //         Debug.Log(savedConfig.GetSpecial);
+        //    }
+        //    else if (args.Count == 2)
+        //    {
+        //        if (!bool.TryParse(args[0], out var recharging))
+        //        {
+        //             Debug.Log("First argument was invalid. It should be a boolean (True / False)");
+        //            return;
+        //        }
+        //        if (!float.TryParse(args[1], out var amount))
+        //        {
+        //             Debug.Log("Second argument was invalid. It should be a positive float (any number 0 or above)");
+        //            return;
+        //        }
+
+        //        savedConfig.SetSpecial(recharging, amount);
+        //        SaveConfigToFile(savedConfig);
+
+        //        if (NetworkServer.active)
+        //        {
+        //            LoadConfigFromFile();
+        //        }
+
+        //         Debug.Log(savedConfig.GetSpecial + "\nThis only affects the current run if you are a host. Otherwise it just changes the config file.");
+        //    }
+        //    else
+        //    {
+        //         Debug.Log("Two arguments expected. A boolean (true or False), and a positive float (any number 0 or higher)");
+        //    }
+        //     Debug.Log("One arguments expected. A boolean (true or False)");
+        //}
+
+        //[ConCommand(commandName = "coh_equipment", flags = ConVarFlags.None, helpText = "Sets Equipment Skill configurations.")]
+        //private static void CCSetEquipment(ConCommandArgs args)
+        //{
+        //    if (args.Count == 0)
+        //    {
+        //         Debug.Log(savedConfig.GetEquipment);
+        //    }
+        //    else if (args.Count == 2)
+        //    {
+        //        if (!bool.TryParse(args[0], out var recharging))
+        //        {
+        //             Debug.Log("First argument was invalid. It should be a boolean (True / False)");
+        //            return;
+        //        }
+        //        if (!float.TryParse(args[1], out var amount))
+        //        {
+        //             Debug.Log("Second argument was invalid. It should be a positive float (any number 0 or above)");
+        //            return;
+        //        }
+
+        //        savedConfig.SetEquipment(recharging, amount);
+        //        SaveConfigToFile(savedConfig);
+
+        //        if (NetworkServer.active)
+        //        {
+        //            LoadConfigFromFile();
+        //        }
+
+        //         Debug.Log(savedConfig.GetEquipment + "\nThis only affects the current run if you are a host. Otherwise it just changes the config file.");
+        //    }
+        //    else
+        //    {
+        //         Debug.Log("Two arguments expected. A boolean (true or False), and a positive float (any number 0 or higher)");
+        //    }
+        //     Debug.Log("One arguments expected. A boolean (true or False)");
+        //}
+
+        //[ConCommand(commandName = "coh_getSavedConfig", flags = ConVarFlags.None, helpText = "Displays the saved configuration.")]
+        //private static void CCGetSavedConfig(ConCommandArgs args)
+        //{
+        //     Debug.Log(args.Count == 0  ? savedConfig.ToString() : "Does not accept arguments. Did you mean something else?");
+        //}
+
+        //[ConCommand(commandName = "coh_getRunConfig", flags = ConVarFlags.None, helpText = "Display the current configuration")]
+        //private static void CCGetCurrentConfig(ConCommandArgs args)
+        //{
+        //     Debug.Log(args.Count == 0 ? currentRunConfig.ToString() : "Does not accept arguments. Did you mean something else?");
+        //}
+
+        //[ConCommand(commandName = "coh_resetConfig", flags = ConVarFlags.None, helpText = "Sets the config to default values.")]
+        //private static void CCResetConfig(ConCommandArgs args)
+        //{
+        //    SaveConfigToFile(savedConfig);
+
+        //    if (NetworkServer.active)
+        //    {
+        //        LoadConfigFromFile();
+        //    }
+        //     Debug.Log(savedConfig.ToString() + "\nThis only affects the current run if you are a host. Otherwise it just changes the config file.");
+        //}
+
+
+
+
+        public static ConfigContainer savedConfig = new ConfigContainer();
+
+        public static ConfigContainer currentRunConfig;
+
+        private static ConfigWrapper<bool> PrimarySkillRechargingConfig { get; set; }
+        private static ConfigWrapper<string> PrimarySkillCooldownReductionOnHitAmountConfig { get; set; }
+
+
+        private static ConfigWrapper<bool> SecondarySkillRechargingConfig { get; set; }
+        private static ConfigWrapper<string> SecondarySkillCooldownReductionOnHitAmountConfig { get; set; }
+
+
+        private static ConfigWrapper<bool> UtilitySkillRechargingConfig { get; set; }
+        private static ConfigWrapper<string> UtilitySkillCooldownReductionOnHitAmountConfig { get; set; }
+
+
+        private static ConfigWrapper<bool> SpecialSkillRechargingConfig { get; set; }
+        private static ConfigWrapper<string> SpecialSkillCooldownReductionOnHitAmountConfig { get; set; }
+
+
+        private static ConfigWrapper<bool> EquipmentRechargingConfig { get; set; }
+        private static ConfigWrapper<string> EquipmentCooldownReductionOnHitAmountConfig { get; set; }
+        public void WrapConfig()
         {
-            if (args.Count == 0)
-            {
-                Debug.Log($"Utility Skills recharging: { (UtilitySkillRechargingConfig.Value == true ? "Enabled" : "Disabled")}");
-            }
-            else if (args.Count == 1)
-            {
-                if (!bool.TryParse(args[0], out var recharging))
-                {
-                    Debug.Log("First argument was invalid. It should be a boolean (True / False)");
-                    return;
-                }
+            var WIPDescription = "Does not do anything. I'll gladly accept suggestions";
+            var WIPvalue = @"¯\_(ツ)_/¯";
+
+            PrimarySkillRechargingConfig = Config.Wrap(
+                "Cooldowns",
+                "PrimarySkillRecharging",
+                "Enables normal recharging of primary skill",
+                true);
+            PrimarySkillCooldownReductionOnHitAmountConfig = Config.Wrap(
+                "Cooldowns",
+                "PrimarySkillCooldownReductionOnHitAmount",
+                WIPDescription,
+                WIPvalue);
 
 
-                UtilitySkillRechargingConfig.Value = recharging;
+            SecondarySkillRechargingConfig = Config.Wrap(
+                "Cooldowns",
+                "SecondarySkillRecharging",
+                "Enables normal recharging of Secondary Skill",
+                false);
+            SecondarySkillCooldownReductionOnHitAmountConfig = Config.Wrap(
+                "Cooldowns",
+                "SecondarySkillCooldownReductionOnHitAmount",
+                "How many seconds ot reduce the Secondary Skill (RMB) cooldown by on each hit with the Primary Skill",
+                "1");
 
-                Debug.Log($"Utility Skills recharging: { (UtilitySkillRechargingConfig.Value == true ? "Enabled" : "Disabled")}");
-            }
-            else
-            {
-                Debug.Log("One arguments expected. A boolean (true or False)");
-            }
+
+            UtilitySkillRechargingConfig = Config.Wrap(
+                "Cooldowns",
+                "UtilitySkillRecharging",
+                "Enables normal recharging of Utility skills",
+                true);
+            UtilitySkillCooldownReductionOnHitAmountConfig = Config.Wrap(
+                "Cooldowns",
+                "UtilitySkillCooldownReductionOnHitAmount",
+                WIPDescription,
+                WIPvalue);
+
+
+            SpecialSkillRechargingConfig = Config.Wrap(
+                "Cooldowns",
+                "SpecialSkillRecharging",
+                "Enables normal recharging of Special Skills",
+                false);
+            SpecialSkillCooldownReductionOnHitAmountConfig = Config.Wrap(
+                "Cooldowns",
+                "SpecialAbilityCooldownReductionOnHitAmount",
+                "How many seconds to reduce the Special Skill(R) cooldown by on each hit with the Secondary skill.",
+                "2.5");
+
+
+            EquipmentRechargingConfig = Config.Wrap(
+                "Cooldowns",
+                "EquipmentRecharging",
+                "W.I.P - Cannot currently be disabled with this mod (Coming in a future major update)\nEnables normal recharging of Equipment",
+                true);
+            EquipmentCooldownReductionOnHitAmountConfig = Config.Wrap(
+                "Cooldowns",
+                "EquipmentCooldownReductionOnHitAmount",
+                WIPDescription,
+                WIPvalue);
         }
 
-        [ConCommand(commandName = "COH_Special", flags = ConVarFlags.None, helpText = "Sets Special Skill configurations.")]
-        private static void CCSpecial(ConCommandArgs args)
+        public static void SaveConfigToFile(ConfigContainer container)
         {
+            PrimarySkillRechargingConfig.Value = container.primaryRecharging;
+            PrimarySkillCooldownReductionOnHitAmountConfig.Value = container.primaryAmount.ToString();
 
-            if (args.Count == 0)
-            {
-                Debug.Log($"Special Skills recharging: { (SpecialSkillRechargingConfig.Value == true ? "Enabled" : "Disabled")}");
-            }
-            else if (args.Count == 2)
-            {
-                if (!bool.TryParse(args[0], out var recharging))
-                {
-                    Debug.Log("First argument was invalid. It should be a boolean (True / False)");
-                    return;
-                }
-                if (!float.TryParse(args[1], out var amount))
-                {
-                    Debug.Log("Second argument was invalid. It should be a positive float (any number 0 or above)");
-                    return;
-                }
+            SecondarySkillRechargingConfig.Value = container.secondaryRecharging;
+            SecondarySkillCooldownReductionOnHitAmountConfig.Value = container.secondaryAmount.ToString();
 
-                SpecialSkillRechargingConfig.Value = recharging;
-                SpecialSkillCooldownReductionOnHitAmountConfig.Value = amount;
+            UtilitySkillRechargingConfig.Value = container.utilityRecharging;
+            UtilitySkillCooldownReductionOnHitAmountConfig.Value = container.utilityAmount.ToString();
 
-                Debug.Log($"Special Skills recharging: { (SpecialSkillRechargingConfig.Value == true ? "Enabled" : "Disabled")}: {SpecialSkillCooldownReductionOnHitAmountConfig.Value} seconds");
-            }
-            else
-            {
-                Debug.Log("Two arguments expected. A boolean (true or False), and a positive float (any number 0 or higher)");
-            }
+            SpecialSkillRechargingConfig.Value = container.specialRecharging;
+            SpecialSkillCooldownReductionOnHitAmountConfig.Value = container.specialAmount.ToString();
+
+            EquipmentRechargingConfig.Value = container.equipmentRecharging;
+            EquipmentCooldownReductionOnHitAmountConfig.Value = container.equipmentAmount.ToString();
         }
-
-        [ConCommand(commandName = "COH_Equipment", flags = ConVarFlags.None, helpText = "Sets Equipment Skill configurations.")]
-        private static void CCSetEquipment(ConCommandArgs args)
+        public static ConfigContainer LoadConfigFromFile()
         {
-            if (args.Count == 0)
-            {
-                Debug.Log($"Equipment Skills recharging: { (EquipmentRechargingConfig.Value == true ? "Enabled" : "Disabled")}");
-            }
-            else if (args.Count == 1)
-            {
-                if (!bool.TryParse(args[0], out var recharging))
-                {
-                    Debug.Log("First argument was invalid. It should be a boolean (True / False)");
-                }
-
-                PrimarySkillRechargingConfig.Value = recharging;
-
-                Debug.Log($"Equipment Skills recharging: { (UtilitySkillRechargingConfig.Value == true ? "Enabled" : "Disabled")}");
-            }
-            else
-            {
-                Debug.Log("One arguments expected. A boolean (true or False)");
-            }
-        }
-
-        [ConCommand(commandName = "COH_GetConfig", flags = ConVarFlags.None, helpText = "Displays the current configuration.")]
-        private static void CCGetConfig(ConCommandArgs args)
-        {
-            Debug.Log(args.Count != 0
-                ? "Does not accept arguments. Did you mean something else?"
-                : SeeConfig);
-        }
-
-        [ConCommand(commandName = "COH_ResetConfig", flags = ConVarFlags.None, helpText = "Sets the config back to its default state")]
-        private static void CCResetConfig(ConCommandArgs args)
-        {
-            SetDefaultConfig();
-            Debug.Log(SeeConfig);
+            ConfigContainer tempContainer = new ConfigContainer();
+            tempContainer.SetPrimary(  PrimarySkillRechargingConfig.Value,     ConfigHelper.ConfigToFloat(PrimarySkillCooldownReductionOnHitAmountConfig.Value));
+            tempContainer.SetSecondary(SecondarySkillRechargingConfig.Value,   ConfigHelper.ConfigToFloat(SecondarySkillCooldownReductionOnHitAmountConfig.Value));
+            tempContainer.SetUtility(  UtilitySkillRechargingConfig.Value,     ConfigHelper.ConfigToFloat(UtilitySkillCooldownReductionOnHitAmountConfig.Value));
+            tempContainer.SetSpecial(  SpecialSkillRechargingConfig.Value,     ConfigHelper.ConfigToFloat(SpecialSkillCooldownReductionOnHitAmountConfig.Value));
+            tempContainer.SetEquipment(EquipmentRechargingConfig.Value,        ConfigHelper.ConfigToFloat(EquipmentCooldownReductionOnHitAmountConfig.Value));
+            return tempContainer;
         }
     }
 }
