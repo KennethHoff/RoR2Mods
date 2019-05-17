@@ -34,6 +34,8 @@ This mod completely disabled the passive recharging of skills, and instead turns
 
 * In Multiplayer, non-hosts stops working after going to the second stage.
 
+* Commands are not working
+
 ## Features I might add (In order of importance)
 
 * Add the effect onto a Lunar item. *Can not begin until an item API becomes available.
