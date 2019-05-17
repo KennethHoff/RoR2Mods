@@ -1,3 +1,6 @@
+
+
+
 Have you ever felt like Attack Speed wasn't good enough? Then this mod is for you!
 
 This mod completely disabled the passive recharging of skills, and instead turns cooldowns into a system of rotations.
@@ -25,11 +28,11 @@ This mod completely disabled the passive recharging of skills, and instead turns
 
 * `COH_ResetConfig` | Resets all configurations to default.
 
-## Compatibility
+## Compatibility / Known issues
 
-* Currently only works on Huntress.
+* Have not tested for compatibility with any mod. If you find any incompatabilities, please tell me (@Modernkennnern on the Risk of Rain 2 Modding Discord)
 
-* Have not tested for compatability with any mod. If you find any incompatabilities, please tell me (@Modernkennnern on the Risk of Rain 2 Modding Discord)
+* In Multiplayer, non-hosts stops working after going to the second stage.
 
 ## Features I might add (In order of importance)
 
