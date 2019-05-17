@@ -6,7 +6,6 @@ namespace CooldownOnHit
 {
     public class ConfigContainer : MessageBase
     {
-
         public bool primaryRecharging;
         public bool secondaryRecharging;
         public bool utilityRecharging;
@@ -14,14 +13,11 @@ namespace CooldownOnHit
         public bool equipmentRecharging;
 
 
-
-
         public float primaryAmount;
         public float secondaryAmount;
         public float utilityAmount;
         public float specialAmount;
         public float equipmentAmount;
-
 
 
         public override void Serialize(NetworkWriter writer)

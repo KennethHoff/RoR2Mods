@@ -10,7 +10,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)ConfigHelper.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)SkillDamageSource.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Reflection.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CommandHelper.cs" />
   </ItemGroup>

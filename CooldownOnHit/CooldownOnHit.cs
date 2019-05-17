@@ -9,7 +9,6 @@ using System.Reflection;
 using UnityEngine;
 using UnityEngine.Networking;
 using Utilities;
-using System.Linq;
 
 namespace CooldownOnHit
 {
@@ -105,6 +104,10 @@ namespace CooldownOnHit
 
         public IRpcAction<int> CooldownRequestClient { get; set; }
 
+        public static bool DebugActive = false;
+
+        private bool runstarted = false;
+
 
 
 
@@ -117,7 +120,6 @@ namespace CooldownOnHit
 
 
         private bool localPlayercharacterSupported;
-        private int localPlayerNumber;
 
         private CharacterMaster localPlayerCharacterMaster;
         private SurvivorIndex localPlayerSurvivorIndex;
@@ -137,7 +139,6 @@ namespace CooldownOnHit
 
         }
 
-
         public void SetDefaultValues()
         {
 
@@ -147,9 +148,9 @@ namespace CooldownOnHit
 
         private void GetConfig()
         {
-            Debug.Log("Loading Config");
+            if (DebugActive) Debug.Log("Loading Config");
             savedConfig = LoadConfigFromFile();
-            Debug.Log("Config loaded\n" + savedConfig.ToString());
+            if (DebugActive) Debug.Log("Config loaded\n" + savedConfig.ToString());
         }
 
         private void SendConfigToPlayers()
@@ -166,6 +167,8 @@ namespace CooldownOnHit
 
             GetConfig();
 
+            On.RoR2.GenericSkill.RunRecharge += GenericSkill_RunRecharge;
+
             On.RoR2.Console.Awake += (orig, self) =>
             {
                 orig(self);
@@ -175,13 +178,22 @@ namespace CooldownOnHit
             On.EntityStates.SurvivorPod.Descent.OnEnter += (orig, self) =>
             {
                 orig(self);
-                EnableEvents_PodDescent();
+                StartRun();
             };
 
             On.EntityStates.SurvivorPod.Landed.OnEnter += (orig, self) =>
             {
                 orig(self);
-                EnableEvents_PodLanded();
+                StartStage();
+            };
+
+
+            On.RoR2.Stage.RespawnCharacter += (orig, self, CharacterMaster) =>
+            {
+                orig(self, CharacterMaster);
+                if (!runstarted) return;
+                if (DebugActive) Debug.Log("RoR2.Stage.RespawnCharacter");
+                StartStage();
             };
 
 
@@ -194,32 +206,22 @@ namespace CooldownOnHit
 
         }
 
-        public void EnableEvents_PodDescent()
+
+
+        public void StartRun()
         {
-            Debug.LogWarning("Survivor Pod Descends");
-
-            CheckLocalCharacterSupported();
-
             SetDefaultValues();
             SendConfigToPlayers();
-
-
+            runstarted = true;
+            //GetLocalPlayerInfo();
+            //CheckLocalCharacterSupported();
         }
 
 
-        private void EnableEvents_PodLanded()
+        private void StartStage()
         {
             GetLocalPlayerInfo();
-
-
-
-
-
-            if (currentRunConfig == null)
-            {
-                Debug.LogWarning("Current Run Config is null. RunRecharge will not... Run >:)");
-            }
-            On.RoR2.GenericSkill.RunRecharge += GenericSkill_RunRecharge;
+            CheckLocalCharacterSupported();
         }
 
         private void RegisterMiniRpc()
@@ -229,9 +231,9 @@ namespace CooldownOnHit
 
             ConfigRequestClient = miniRpc.RegisterAction(Target.Client, (NetworkUser user, ConfigContainer configContainer ) =>
             {
-                Debug.Log("Saved config:\n" + savedConfig.ToString());
+                if (DebugActive) Debug.Log("Saved config:\n" + savedConfig.ToString());
                 currentRunConfig = configContainer;
-                Debug.Log("Current config:\n" + currentRunConfig.ToString());
+                if (DebugActive) Debug.Log("Current config:\n" + currentRunConfig.ToString());
             });
 
             CharacterSupportedRequestHost = miniRpc.RegisterFunc<int, CharacterSupportContainer>(Target.Server, (NetworkUser user, int i) =>
@@ -244,7 +246,7 @@ namespace CooldownOnHit
                 ret.supported = supported;
 
 
-                Debug.Log($"[Host]: Client {user} sent me {index}. It is {(supported ? "" : "not")} supported");
+                if (DebugActive) Debug.Log($"[Host]: Client {user} sent me {index}. It is {(supported ? "" : "not")} supported");
                 return ret;
             });
 
@@ -273,7 +275,7 @@ namespace CooldownOnHit
                         AlterCooldown(localPlayerSpecialSkill, currentRunConfig.specialAmount);
                         break;
                     case SkillSlot.None:
-                        Debug.LogError("Sent Skillslot None");
+                        if (DebugActive) Debug.LogError("Sent Skillslot None");
                         break;
                 }
             });
@@ -282,6 +284,7 @@ namespace CooldownOnHit
 
         public void Update()
         {
+            if (!DebugActive) return;
             if (Input.GetKeyDown(KeyCode.F2))
             {
                 GetLocalPlayerInfo();
@@ -298,10 +301,10 @@ namespace CooldownOnHit
                 {
                     stringerino += " on client";
                 }
-                Chat.AddMessage(stringerino);
+                if (DebugActive) Chat.AddMessage(stringerino);
 
 
-                Chat.AddMessage("Survivor: " + localPlayerSurvivorIndex.ToString() + " supported? " + localPlayercharacterSupported.ToString());
+                if (DebugActive) Chat.AddMessage("Survivor: " + localPlayerSurvivorIndex.ToString() + " supported? " + localPlayercharacterSupported.ToString());
             }
         }
 
@@ -309,24 +312,22 @@ namespace CooldownOnHit
         {
             if (NetworkServer.active)
             {
-                Debug.Log("Getting LocalPlayerCharacterMaster on server");
+                if (DebugActive) Debug.Log("Getting LocalPlayerCharacterMaster on server");
                 localPlayerCharacterMaster = LocalUserManager.GetFirstLocalUser().cachedMasterController.master;
-                Debug.Log($"Got [{localPlayerCharacterMaster}])");
+                if (DebugActive) Debug.Log($"Got [{localPlayerCharacterMaster}])");
             }
             else if (NetworkClient.active)
             {
-                Debug.Log("Getting LocalPlayerCharacterMaster on client");
+                if (DebugActive) Debug.Log("Getting LocalPlayerCharacterMaster on client");
                 localPlayerCharacterMaster = LocalUserManager.GetFirstLocalUser().cachedMasterController.master;
-                Debug.Log($"Got [{localPlayerCharacterMaster}])");
+                if (DebugActive) Debug.Log($"Got [{localPlayerCharacterMaster}])");
             }
-
-            //localPlayerSurvivorIndex = GetSurvivorIndex(localPlayerCharacterMaster);
-
 
             if (localPlayerCharacterMaster == null)
             {
-                Debug.LogWarning("CharacterMaster not set!");
+                if (DebugActive) Debug.LogWarning("CharacterMaster not set!");
             }
+
             localPlayerSkillLoc = GetSkillLoc(localPlayerCharacterMaster);
 
             Chat_GetLocalPlayerInfo();
@@ -341,20 +342,12 @@ namespace CooldownOnHit
             localPlayerSecondarySkill = localPlayerSkillLoc.secondary;
             localPlayerUtilitySkill = localPlayerSkillLoc.utility;
             localPlayerSpecialSkill = localPlayerSkillLoc.special;
-            //Chat_GetLocalPlayerSkills();
         }
 
-        private void Chat_GetLocalPlayerSkills()
-        {
-            Chat.AddMessage($"Primary skill: {localPlayerPrimarySkill}");
-            Chat.AddMessage($"Secondary skill: {localPlayerSecondarySkill}");
-            Chat.AddMessage($"Utility skill: {localPlayerUtilitySkill}");
-            Chat.AddMessage($"Special skill: {localPlayerSpecialSkill}");
-        }
 
         public void Chat_GetLocalPlayerInfo()
         {
-            Chat.AddMessage("You are playing as: " + localPlayerSurvivorIndex);
+            if (DebugActive) Chat.AddMessage("You are playing as: " + localPlayerSurvivorIndex);
         }
 
 
@@ -364,38 +357,13 @@ namespace CooldownOnHit
             AlterSkillCooldown(skill, amount);
         }
 
-        private float GetCooldownReduction(SkillLocator locator, GenericSkill skill)
-        {
-            switch (locator.FindSkillSlot(skill))
-            {
-                case SkillSlot.Primary:
-                    return currentRunConfig.primaryAmount;
-
-                case SkillSlot.Secondary:
-                    return currentRunConfig.secondaryAmount;
-
-                case SkillSlot.Utility:
-                    return currentRunConfig.utilityAmount;
-
-                case SkillSlot.Special:
-                    return currentRunConfig.specialAmount;
-
-                case SkillSlot.None:
-                    Debug.LogWarning("Skill is using SkillSlot None");
-                    return 0.0f;
-
-                default:
-                    Debug.LogWarning("Not a skillSlot");
-                    return 0.0f;
-            }
-        }
-
         public static SkillLocator GetSkillLoc(CharacterMaster master)
         {
+            if (DebugActive) Debug.Log("[GetSkillLoc]: Master: " + master.ToString());
             CharacterBody body = master.GetBody();
-            Debug.Log("Character Body: " + body.ToString());
+            if (DebugActive) Debug.Log("[GetSkillLoc]: Character Body: " + body.ToString());
             SkillLocator locator = body.GetComponent<SkillLocator>();
-            Debug.Log("Primary skill: " + locator.primary.name.ToString());
+            if (DebugActive) Debug.Log("[GetSkillLoc]: Primary skill: " + locator.primary.name.ToString());
             return locator;
         }
 
@@ -410,7 +378,7 @@ namespace CooldownOnHit
 
             if (hitInfo.entityObject.GetComponent<TeamComponent>().teamIndex == TeamIndex.Monster)
             {
-                Debug.Log("Hit a monster!");
+                if (DebugActive) Debug.Log("Hit a monster!");
             }
 
             return b;
@@ -508,38 +476,25 @@ namespace CooldownOnHit
             float rechargeStopwatchValue = (float)rechargeStopwatchField.GetValue(skill);
             var finalRechargeIntervalField = skillType.GetField("finalRechargeInterval", BindingFlags.NonPublic | BindingFlags.Instance);
             float finalRechargeIntervalValue = (float)finalRechargeIntervalField.GetValue(skill);
-            var restockSteplikeMethod = skillType.GetMethod("RestockSteplike", BindingFlags.NonPublic | BindingFlags.Instance);
 
             return (rechargeStopwatchValue >= finalRechargeIntervalValue);
         }
-
-        //private void CheckLocalCharacterSupported()
-        //{
-        //    CharacterSupportedRequestHost.Invoke((int)localPlayerSurvivorIndex, result =>
-        //    {
-        //        Debug.Log(localPlayerSurvivorIndex.ToString());
-        //        localPlayercharacterSupported = result;
-
-        //        Debug.Log($"[Client]: Server sent me {result} on my request on CharacterSupport. I sent in {localPlayerSurvivorIndex.ToString()}");
-        //    });
-        //}
         private void CheckLocalCharacterSupported()
         {
             CharacterSupportedRequestHost.Invoke((int)localPlayerSurvivorIndex, result =>
             {
-                Debug.Log(localPlayerSurvivorIndex.ToString());
+                if (DebugActive) Debug.Log(localPlayerSurvivorIndex.ToString());
                 localPlayercharacterSupported = result.supported;
 
                 localPlayerSurvivorIndex = (SurvivorIndex)result.index;
 
-                Debug.Log($"[Client]: Server sent me (Index: {result.index}, result: {result.supported} on my request on CharacterSupport.");
+                if (DebugActive) Debug.Log($"[Client]: Server sent me (Index: {result.index}, result: {result.supported} on my request on CharacterSupport.");
             });
         }
 
         public bool CheckCharacterSupport(SurvivorIndex index)
         {
             var find = Array.IndexOf<SurvivorIndex>(workingSurvivors, index);
-            var workingSurvivorsString = string.Join(", ", workingSurvivors);
 
             if (find == -1)
             {
@@ -555,7 +510,7 @@ namespace CooldownOnHit
         public SurvivorIndex GetSurvivorIndex(CharacterMaster master)
         {
             var bodyPrefab = master.bodyPrefab;
-            Debug.Log("Body prefab:" + bodyPrefab);
+            if (DebugActive) Debug.Log("Body prefab:" + bodyPrefab);
             var def = SurvivorCatalog.FindSurvivorDefFromBody(bodyPrefab);
             var index = def.survivorIndex;
 
@@ -595,7 +550,7 @@ namespace CooldownOnHit
             string line1 = "Total cooldown: " + GetSkillCooldownReflection(skill).ToString();
             string line2 = "Cooldown Reduction: " + roundedNumber;
             string line3 = "Remaining Cooldown: " + skill.cooldownRemaining;
-            Chat.AddMessage(line0 + "\n" + line1 + "\n" + line2 + "\n" + line3);
+            if (DebugActive) Chat.AddMessage(line0 + "\n" + line1 + "\n" + line2 + "\n" + line3);
         }
 
         private void SendAlterCooldownRequestToClient(SkillSlot slot, NetworkUser user)
@@ -638,7 +593,7 @@ namespace CooldownOnHit
             }
             if (user == null)
             {
-                Debug.LogWarning("User is null");
+                if (DebugActive) Debug.LogWarning("User is null");
             }
 
             return user;
@@ -648,7 +603,7 @@ namespace CooldownOnHit
         {
             orig(self);
 
-            Debug.Log("Lightning orb has arrived");
+            if (DebugActive) Debug.Log("Lightning orb has arrived");
 
 
             if (self.lightningType == RoR2.Orbs.LightningOrb.LightningType.HuntressGlaive)
@@ -677,7 +632,7 @@ namespace CooldownOnHit
             }
         }
 
-        [ConCommand(commandName = "COH_Primary", flags = ConVarFlags.SenderMustBeServer, helpText = "Primary Skill configurations.")]
+        [ConCommand(commandName = "coh_primary", flags = ConVarFlags.None, helpText = "Primary Skill configurations.")]
         private static void CCPrimary(ConCommandArgs args)
         {
             if (args.Count == 0)
@@ -700,7 +655,12 @@ namespace CooldownOnHit
                 savedConfig.SetPrimary(recharging, amount);
                 SaveConfigToFile(savedConfig);
 
-                Debug.Log(savedConfig.GetPrimary);
+                if (NetworkServer.active)
+                {
+                    LoadConfigFromFile();
+                }
+
+                Debug.Log(savedConfig.GetPrimary + "\nThis only affects the current run if you are a host. Otherwise it just changes the config file.");
             }
             else
             {
@@ -708,151 +668,176 @@ namespace CooldownOnHit
             }
         }
 
-        [ConCommand(commandName = "COH_Secondary", flags = ConVarFlags.SenderMustBeServer, helpText = "Secondary Skill configurations.")]
-        private static void CCSecondary(ConCommandArgs args)
-        {
-            if (args.Count == 0)
-            {
-                Debug.Log(savedConfig.GetSecondary);
-            }
-            else if (args.Count == 2)
-            {
-                if (!bool.TryParse(args[0], out var recharging))
-                {
-                    Debug.Log("First argument was invalid. It should be a boolean (True / False)");
-                    return;
-                }
-                if (!float.TryParse(args[1], out var amount))
-                {
-                    Debug.Log("Second argument was invalid. It should be a positive float (any number 0 or above)");
-                    return;
-                }
+        //[ConCommand(commandName = "coh_secondary", flags = ConVarFlags.None, helpText = "Secondary Skill configurations.")]
+        //private static void CCSecondary(ConCommandArgs args)
+        //{
+        //    if (args.Count == 0)
+        //    {
+        //         Debug.Log(savedConfig.GetSecondary);
+        //    }
+        //    else if (args.Count == 2)
+        //    {
+        //        if (!bool.TryParse(args[0], out var recharging))
+        //        {
+        //             Debug.Log("First argument was invalid. It should be a boolean (True / False)");
+        //            return;
+        //        }
+        //        if (!float.TryParse(args[1], out var amount))
+        //        {
+        //             Debug.Log("Second argument was invalid. It should be a positive float (any number 0 or above)");
+        //            return;
+        //        }
 
-                savedConfig.SetSecondary(recharging, amount);
-                SaveConfigToFile(savedConfig);
+        //        savedConfig.SetSecondary(recharging, amount);
+        //        SaveConfigToFile(savedConfig);
 
-                Debug.Log(savedConfig.GetSecondary);
-            }
-            else
-            {
-                Debug.Log("Two arguments expected. A boolean (true or False), and a positive float (any number 0 or higher)");
-            }
-        }
+        //        if (NetworkServer.active)
+        //        {
+        //            LoadConfigFromFile();
+        //        }
 
-        [ConCommand(commandName = "COH_Utility", flags = ConVarFlags.SenderMustBeServer, helpText = "Utility Skill configurations.")]
-        private static void CCUtility(ConCommandArgs args)
-        {
-            if (args.Count == 0)
-            {
-                Debug.Log(savedConfig.GetUtility);
-            }
-            else if (args.Count == 2)
-            {
-                if (!bool.TryParse(args[0], out var recharging))
-                {
-                    Debug.Log("First argument was invalid. It should be a boolean (True / False)");
-                    return;
-                }
-                if (!float.TryParse(args[1], out var amount))
-                {
-                    Debug.Log("Second argument was invalid. It should be a positive float (any number 0 or above)");
-                    return;
-                }
+        //         Debug.Log(savedConfig.GetSecondary + "\nThis only affects the current run if you are a host. Otherwise it just changes the config file.");
+        //    }
+        //    else
+        //    {
+        //         Debug.Log("Two arguments expected. A boolean (true or False), and a positive float (any number 0 or higher)");
+        //    }
+        //}
 
-                savedConfig.SetUtility(recharging, amount);
-                SaveConfigToFile(savedConfig);
+        //[ConCommand(commandName = "coh_utility", flags = ConVarFlags.None, helpText = "Utility Skill configurations.")]
+        //private static void CCUtility(ConCommandArgs args)
+        //{
+        //    if (args.Count == 0)
+        //    {
+        //         Debug.Log(savedConfig.GetUtility);
+        //    }
+        //    else if (args.Count == 2)
+        //    {
+        //        if (!bool.TryParse(args[0], out var recharging))
+        //        {
+        //             Debug.Log("First argument was invalid. It should be a boolean (True / False)");
+        //            return;
+        //        }
+        //        if (!float.TryParse(args[1], out var amount))
+        //        {
+        //             Debug.Log("Second argument was invalid. It should be a positive float (any number 0 or above)");
+        //            return;
+        //        }
 
-                Debug.Log(savedConfig.GetUtility);
-            }
-            else
-            {
-                Debug.Log("Two arguments expected. A boolean (true or False), and a positive float (any number 0 or higher)");
-            }
-            Debug.Log("One arguments expected. A boolean (true or False)");
-        }
+        //        savedConfig.SetUtility(recharging, amount);
+        //        SaveConfigToFile(savedConfig);
 
-        [ConCommand(commandName = "COH_Special", flags = ConVarFlags.SenderMustBeServer, helpText = "Sets Special Skill configurations.")]
-        private static void CCSpecial(ConCommandArgs args)
-        {
-            if (args.Count == 0)
-            {
-                Debug.Log(savedConfig.GetSpecial);
-            }
-            else if (args.Count == 2)
-            {
-                if (!bool.TryParse(args[0], out var recharging))
-                {
-                    Debug.Log("First argument was invalid. It should be a boolean (True / False)");
-                    return;
-                }
-                if (!float.TryParse(args[1], out var amount))
-                {
-                    Debug.Log("Second argument was invalid. It should be a positive float (any number 0 or above)");
-                    return;
-                }
+        //        if (NetworkServer.active)
+        //        {
+        //            LoadConfigFromFile();
+        //        }
 
-                savedConfig.SetSpecial(recharging, amount);
-                SaveConfigToFile(savedConfig);
+        //         Debug.Log(savedConfig.GetUtility + "\nThis only affects the current run if you are a host. Otherwise it just changes the config file.");
+        //    }
+        //    else
+        //    {
+        //         Debug.Log("Two arguments expected. A boolean (true or False), and a positive float (any number 0 or higher)");
+        //    }
+        //     Debug.Log("One arguments expected. A boolean (true or False)");
+        //}
 
-                Debug.Log(savedConfig.GetSpecial);
-            }
-            else
-            {
-                Debug.Log("Two arguments expected. A boolean (true or False), and a positive float (any number 0 or higher)");
-            }
-            Debug.Log("One arguments expected. A boolean (true or False)");
-        }
+        //[ConCommand(commandName = "coh_special", flags = ConVarFlags.None, helpText = "Sets Special Skill configurations.")]
+        //private static void CCSpecial(ConCommandArgs args)
+        //{
+        //    if (args.Count == 0)
+        //    {
+        //         Debug.Log(savedConfig.GetSpecial);
+        //    }
+        //    else if (args.Count == 2)
+        //    {
+        //        if (!bool.TryParse(args[0], out var recharging))
+        //        {
+        //             Debug.Log("First argument was invalid. It should be a boolean (True / False)");
+        //            return;
+        //        }
+        //        if (!float.TryParse(args[1], out var amount))
+        //        {
+        //             Debug.Log("Second argument was invalid. It should be a positive float (any number 0 or above)");
+        //            return;
+        //        }
 
-        [ConCommand(commandName = "COH_Equipment", flags = ConVarFlags.SenderMustBeServer, helpText = "Sets Equipment Skill configurations.")]
-        private static void CCSetEquipment(ConCommandArgs args)
-        {
-            if (args.Count == 0)
-            {
-                Debug.Log(savedConfig.GetEquipment);
-            }
-            else if (args.Count == 2)
-            {
-                if (!bool.TryParse(args[0], out var recharging))
-                {
-                    Debug.Log("First argument was invalid. It should be a boolean (True / False)");
-                    return;
-                }
-                if (!float.TryParse(args[1], out var amount))
-                {
-                    Debug.Log("Second argument was invalid. It should be a positive float (any number 0 or above)");
-                    return;
-                }
+        //        savedConfig.SetSpecial(recharging, amount);
+        //        SaveConfigToFile(savedConfig);
 
-                savedConfig.SetEquipment(recharging, amount);
-                SaveConfigToFile(savedConfig);
+        //        if (NetworkServer.active)
+        //        {
+        //            LoadConfigFromFile();
+        //        }
 
-                Debug.Log(savedConfig.GetEquipment);
-            }
-            else
-            {
-                Debug.Log("Two arguments expected. A boolean (true or False), and a positive float (any number 0 or higher)");
-            }
-            Debug.Log("One arguments expected. A boolean (true or False)");
-        }
+        //         Debug.Log(savedConfig.GetSpecial + "\nThis only affects the current run if you are a host. Otherwise it just changes the config file.");
+        //    }
+        //    else
+        //    {
+        //         Debug.Log("Two arguments expected. A boolean (true or False), and a positive float (any number 0 or higher)");
+        //    }
+        //     Debug.Log("One arguments expected. A boolean (true or False)");
+        //}
 
-        [ConCommand(commandName = "COH_GetSavedConfig", flags = ConVarFlags.SenderMustBeServer, helpText = "Displays the saved configuration.")]
-        private static void CCGetSavedConfig(ConCommandArgs args)
-        {
-            Debug.Log(args.Count == 0  ? savedConfig.ToString() : "Does not accept arguments. Did you mean something else?");
-        }
+        //[ConCommand(commandName = "coh_equipment", flags = ConVarFlags.None, helpText = "Sets Equipment Skill configurations.")]
+        //private static void CCSetEquipment(ConCommandArgs args)
+        //{
+        //    if (args.Count == 0)
+        //    {
+        //         Debug.Log(savedConfig.GetEquipment);
+        //    }
+        //    else if (args.Count == 2)
+        //    {
+        //        if (!bool.TryParse(args[0], out var recharging))
+        //        {
+        //             Debug.Log("First argument was invalid. It should be a boolean (True / False)");
+        //            return;
+        //        }
+        //        if (!float.TryParse(args[1], out var amount))
+        //        {
+        //             Debug.Log("Second argument was invalid. It should be a positive float (any number 0 or above)");
+        //            return;
+        //        }
 
-        [ConCommand(commandName = "COH_GetRunConfig", flags = ConVarFlags.None, helpText = "Display the current configuration")]
-        private static void CCGetCurrentConfig(ConCommandArgs args)
-        {
-            Debug.Log(args.Count == 0 ? currentRunConfig.ToString() : "Does not accept arguments. Did you mean something else?");
-        }
+        //        savedConfig.SetEquipment(recharging, amount);
+        //        SaveConfigToFile(savedConfig);
 
-        [ConCommand(commandName = "COH_ResetConfig", flags = ConVarFlags.SenderMustBeServer, helpText = "Sets the config back to its default state")]
-        private static void CCResetConfig(ConCommandArgs args)
-        {
-            savedConfig.SetDefault();
-            Debug.Log(savedConfig.ToString());
-        }
+        //        if (NetworkServer.active)
+        //        {
+        //            LoadConfigFromFile();
+        //        }
+
+        //         Debug.Log(savedConfig.GetEquipment + "\nThis only affects the current run if you are a host. Otherwise it just changes the config file.");
+        //    }
+        //    else
+        //    {
+        //         Debug.Log("Two arguments expected. A boolean (true or False), and a positive float (any number 0 or higher)");
+        //    }
+        //     Debug.Log("One arguments expected. A boolean (true or False)");
+        //}
+
+        //[ConCommand(commandName = "coh_getSavedConfig", flags = ConVarFlags.None, helpText = "Displays the saved configuration.")]
+        //private static void CCGetSavedConfig(ConCommandArgs args)
+        //{
+        //     Debug.Log(args.Count == 0  ? savedConfig.ToString() : "Does not accept arguments. Did you mean something else?");
+        //}
+
+        //[ConCommand(commandName = "coh_getRunConfig", flags = ConVarFlags.None, helpText = "Display the current configuration")]
+        //private static void CCGetCurrentConfig(ConCommandArgs args)
+        //{
+        //     Debug.Log(args.Count == 0 ? currentRunConfig.ToString() : "Does not accept arguments. Did you mean something else?");
+        //}
+
+        //[ConCommand(commandName = "coh_resetConfig", flags = ConVarFlags.None, helpText = "Sets the config to default values.")]
+        //private static void CCResetConfig(ConCommandArgs args)
+        //{
+        //    SaveConfigToFile(savedConfig);
+
+        //    if (NetworkServer.active)
+        //    {
+        //        LoadConfigFromFile();
+        //    }
+        //     Debug.Log(savedConfig.ToString() + "\nThis only affects the current run if you are a host. Otherwise it just changes the config file.");
+        //}
 
 
 
