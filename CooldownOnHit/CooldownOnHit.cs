@@ -95,8 +95,6 @@ namespace CooldownOnHit
 
         public IRpcAction<ConfigContainer> ConfigRequestClient { get; set; }
 
-        // (int)SurvivorIndex => SurvivorIndex(int)
-        //public IRpcFunc<int, bool> CharacterSupportedRequestHost { get; set; }
 
         public IRpcFunc<int, CharacterSupportContainer> CharacterSupportedRequestHost { get; set; }
 
@@ -171,8 +169,8 @@ namespace CooldownOnHit
 
             On.RoR2.Console.Awake += (orig, self) =>
             {
-                orig(self);
                 CommandHelper.RegisterCommands(self);
+                orig(self);
             };
 
             On.EntityStates.SurvivorPod.Descent.OnEnter += (orig, self) =>
