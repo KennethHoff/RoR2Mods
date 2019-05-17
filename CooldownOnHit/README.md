@@ -49,6 +49,11 @@ Risk of Rain 2 Modding Discord for a ton of help
 
 
 ## Changelog
+
+#### 0.2.1
+
+* Accidentally removed BepInEx dependency in the last update. Re-added it
+
 ### 0.2.0
 
 * Now with Multiplayer support!

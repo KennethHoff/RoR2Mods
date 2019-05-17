@@ -1,6 +1,6 @@
 {
     "name": "CooldownOnHit",
-    "version_number": "0.2.0",
+    "version_number": "0.2.1",
     "website_url": "https://github.com/Modernkennnern/RoR2Mods/tree/master/CooldownOnHit",
     "description": "Removes the passive recharging of skills. You instead reduce the cooldown by attacking with certain other skills",
 	"dependencies": [
